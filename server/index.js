@@ -79,11 +79,14 @@ const isReviewerOrAdmin = (req, res, next) => {
   else res.status(403).json({ error: 'Review access is restricted to reviewers and admins.' });
 };
 
+// On Cloudron, the mysql addon injects CLOUDRON_MYSQL_*; falls back to the
+// docker-compose DB_* vars for local dev and the drupaltutorials.de deploy.
 const db = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  user: process.env.DB_USER || 'pb_hub',
-  password: process.env.DB_PASSWORD || 'drupal',
-  database: process.env.DB_NAME || 'pb_translation_hub',
+  host: process.env.CLOUDRON_MYSQL_HOST || process.env.DB_HOST || '127.0.0.1',
+  port: process.env.CLOUDRON_MYSQL_PORT || process.env.DB_PORT || 3306,
+  user: process.env.CLOUDRON_MYSQL_USERNAME || process.env.DB_USER || 'pb_hub',
+  password: process.env.CLOUDRON_MYSQL_PASSWORD || process.env.DB_PASSWORD || 'drupal',
+  database: process.env.CLOUDRON_MYSQL_DATABASE || process.env.DB_NAME || 'pb_translation_hub',
   waitForConnections: true,
   connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 100,
   queueLimit: 0
@@ -91,7 +94,9 @@ const db = mysql.createPool({
 
 const app = express();
 const PORT = process.env.PORT || 9901;
-const DATA_DIR = path.join(__dirname, 'data');
+// On Cloudron, only /app/data is writable (read-only filesystem elsewhere);
+// CLOUDRON_DATA_DIR is not an addon-provided var, we just default to it there.
+const DATA_DIR = process.env.CLOUDRON ? '/app/data' : path.join(__dirname, 'data');
 const METADATA_DIR = path.join(DATA_DIR, 'metadata');
 const TRANSLATIONS_DIR = path.join(DATA_DIR, 'translations');
 const LANGUAGES_FILE = path.join(__dirname, 'languages.json');
