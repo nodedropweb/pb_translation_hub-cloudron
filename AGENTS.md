@@ -2,6 +2,11 @@
 
 Technical map of the PB Translation Hub for developers and AI coding agents.
 
+> **This is the Cloudron-packaged repo.** It runs as a single container behind Cloudron's own
+> reverse proxy (see [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md)), not the docker-compose
+> three-container setup this file otherwise describes (server/client/db). Where the two differ,
+> it's called out inline.
+
 ---
 
 ## Stack
@@ -10,16 +15,20 @@ Technical map of the PB Translation Hub for developers and AI coding agents.
 |---|---|
 | Frontend | Flutter (Dart) — web, desktop, and tablet |
 | Backend | Node.js (Express) |
-| Database | MariaDB (primary) + JSON file backups |
+| Database | MariaDB 11.8 (docker-compose) / MySQL 8.0.31 (Cloudron addon) + JSON file backups |
 | AI | Google Gemini (bulk translation) |
-| Production serving | Nginx (Docker, port 5173) |
+| Production serving | docker-compose: Nginx container, port 5173. Cloudron: nginx inside the single app container, port 3000 (Cloudron's own reverse proxy fronts that publicly) |
 
 ---
 
 ## Repository Layout
 
 ```
-pb_translation_hub/
+pb_translation_hub-cloudron/
+├── CloudronManifest.json    # Cloudron app manifest (id, httpPort 3000, addons: mysql + localstorage)
+├── Dockerfile                # Single-container build: flutter build web (stage 1) + node/nginx on cloudron/base (stage 2)
+├── start.sh                  # Container entrypoint: chown /app/data, backgrounds node, execs nginx
+├── nginx/app.conf             # nginx site config (adapted from flutter_client/nginx.conf, proxies to 127.0.0.1:9901)
 ├── server/
 │   ├── index.js             # Express app entry; loads routes, starts migrations
 │   ├── db_migrate.js        # DB migration runner (auto-called on startup)
@@ -27,7 +36,12 @@ pb_translation_hub/
 │   │   ├── 001_initial_schema.sql
 │   │   ├── 002_users_deepl_key.sql
 │   │   ├── 003_users_registration_fields.sql
-│   │   └── 004_users_requested_role.sql
+│   │   ├── 004_users_requested_role.sql
+│   │   ├── 005_create_glossary_terms.sql
+│   │   ├── 006_suggestion_type_deepl.sql       # also CREATEs translation_suggestions (nachgetragen — see file)
+│   │   ├── 007_glossary_word_forms.sql
+│   │   ├── 008_semver_columns.sql
+│   │   └── 009_sync_events.sql
 │   ├── routes/
 │   │   ├── auth.js          # Login, register, registration-status
 │   │   ├── projects.js      # Project list, search, single-project sync
@@ -39,10 +53,10 @@ pb_translation_hub/
 │   ├── migrate_to_mysql.js  # One-time JSON → MariaDB migration
 │   ├── languages.json       # Supported target language list
 │   ├── watch_stale.sh       # Shell script to watch for stale translations
-│   ├── data/
+│   ├── data/                 # local dev / docker-compose only — on Cloudron this is /app/data (localstorage addon), not server/data
 │   │   ├── metadata/        # JSON snapshots of Drupal.org module data
 │   │   └── translations/    # Per-language JSON translation backups
-│   └── .env                 # Secrets (not committed; see .env.example)
+│   └── .env                 # Secrets (not committed; see .env.example). On Cloudron, config instead comes from CLOUDRON_MYSQL_* + CLOUDRON=1 env vars injected by the platform
 ├── flutter_client/
 │   ├── lib/
 │   │   ├── main.dart        # App entry, ProviderScope wrapper
@@ -104,9 +118,9 @@ pb_translation_hub/
 │   │   └── index.html       # HTML preloader / splash, flutter-first-frame listener
 │   ├── Dockerfile
 │   └── nginx.conf
-├── hubctl.sh
-├── deploy.sh                # rsync + rolling restart + optional --db-backup
-├── docker-compose.yml
+├── hubctl.sh                  # local dev only
+├── deploy.sh                  # docker-compose deployment only — not used on Cloudron, see CLOUDRON_DEPLOYMENT.md
+├── docker-compose.yml         # local dev / non-Cloudron deployment only
 └── server/.env.example
 ```
 
@@ -177,7 +191,15 @@ pb_translation_hub/
 | Column | Type | Notes |
 |---|---|---|
 | `machine_name` | VARCHAR(255) PK | Module identifier |
-| `list_name` | VARCHAR(50) PK | e.g. `drupal11` |
+| `list_name` | VARCHAR(50) PK | e.g. `drupal11` — historical name, no longer read by the filter logic (only `machine_name` matters for list membership) |
+
+The "priority" filter (`getFilteredIndex`, `filter === 'priority'`) means: on this list **and**
+`projects.semver_max < 12000000` (not yet Drupal-12-compatible) — not "untranslated" as an
+earlier version of this filter used to mean. Both the count query
+(`routes/projects.js`) and the list query (`server/index.js`) must stay driven from `projects`
+(joined against `priority_projects`), not from `priority_projects` alone — an earlier version
+counted from `priority_projects` directly while the list joined through `projects`, so priority
+modules never synced into `projects` were counted but invisible in the list.
 
 ### `ignored_projects`
 | Column | Type | Notes |
@@ -338,12 +360,14 @@ await Future.delayed(const Duration(milliseconds: 900));
 
 ## Ports
 
-| Service | Dev port | Production |
-|---|---|---|
-| Backend (Node.js) | 9901 | 9901 (internal Docker) |
-| Frontend (Flutter) | 5173 | 5173 → nginx:80 (Docker) |
+| Service | Dev port | docker-compose production | Cloudron |
+|---|---|---|---|
+| Backend (Node.js) | 9901 | 9901 (internal Docker, never published) | 127.0.0.1:9901 inside the app container, proxied by nginx — never exposed directly |
+| Frontend (Flutter) | 5173 | 5173 → nginx:80 (Docker) | served by the same container's nginx on `httpPort` 3000, which Cloudron's own reverse proxy fronts publicly on 443 |
 
-Use `./hubctl.sh start` for local development — it manages both ports.
+Use `./hubctl.sh start` for local development — it manages both ports. On Cloudron there is only
+ever **one** container and **one** port (`httpPort` in `CloudronManifest.json`) — see
+[CLOUDRON_DEPLOYMENT.md §1](CLOUDRON_DEPLOYMENT.md#1-architecture).
 
 ---
 
@@ -358,9 +382,28 @@ Use `./hubctl.sh start` for local development — it manages both ports.
 ## Guardrails
 
 - All DB queries must use the `db` connection pool (prepared statements via `mysql2`).
-- When saving data, write to **both** MariaDB and the file-system JSON backup.
-- The `server/data/` directory is the portable backup layer — keep it in sync.
+- `mysql2`'s `execute()` rejects bound `LIMIT`/`OFFSET` placeholders on MySQL 8
+  (`ER_WRONG_ARGUMENTS`), even as real numbers — MariaDB is more lenient. Validate as an integer
+  and inline into the SQL string instead of binding as `?` for any `LIMIT`/`OFFSET`.
+- The mysql2 pool is created with `decimalNumbers: true` — do not remove it. Without it, any
+  `SUM(CASE WHEN ... THEN 1 ELSE 0 END)`-style aggregate comes back as a JS string instead of a
+  number, which silently breaks strictly-typed Dart model parsing on the Flutter side (this
+  exact bug made the dashboard's filter-count badges stick at 0).
+- When saving data, write to **both** the database and the file-system JSON backup
+  (`server/data/` locally, `/app/data/` on Cloudron).
+- The data directory is the portable backup layer — keep it in sync.
 - Do not skip the 100 ms sync delay between Drupal.org pages.
 - Review-related endpoints must check `user_type != 'translator'` before proceeding; return HTTP 403 otherwise.
 - Bulk translation is capped at 150 modules per request; do not raise this limit without also extending the Dio `receiveTimeout`.
-- DB migrations must use `ADD COLUMN IF NOT EXISTS` and `CREATE TABLE IF NOT EXISTS` — never `DROP` or `RENAME` without explicit coordination.
+- DB migrations: use `CREATE TABLE IF NOT EXISTS` freely, but **never** `ADD COLUMN IF NOT
+  EXISTS` — it's MariaDB-only and MySQL 8 (Cloudron) rejects it outright. Plain `ADD COLUMN` is
+  fine; `db_migrate.js` already tracks applied versions in `schema_migrations` and never re-runs
+  a migration, so the `IF NOT EXISTS` guard was never load-bearing. Never `DROP` or `RENAME`
+  without explicit coordination.
+- In Riverpod `Notifier.build()`, don't `ref.watch` a provider whose state changes multiple times
+  during app startup (e.g. `languageProvider`, which transitions default → saved-language →
+  post-fetch) if `build()` also kicks off an async side-effecting fetch and returns a fresh
+  default state — each rebuild resets state back to the default and races a new fetch against
+  whatever was already in flight. Use `ref.read` for the initial value and `ref.listen` to react
+  to genuine subsequent changes without resetting state (see `FilterCountsNotifier` in
+  `project_provider.dart` for the fixed pattern, and its comment for the bug this caused).

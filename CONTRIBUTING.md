@@ -31,8 +31,14 @@ The frontend is a Flutter web application under `flutter_client/`.
 
 The backend is a modular Express server. Routes are in `server/routes/`. The entry point is `server/index.js`.
 
-- **Database:** All queries must use the `db` pool with prepared statements (`mysql2`).
-- **Dual persistence:** When writing data, save to both MariaDB *and* the `server/data/` JSON backups.
+- **Database:** All queries must use the `db` pool with prepared statements (`mysql2`). Note:
+  `mysql2`'s `execute()` (server-side prepared statements) rejects bound `LIMIT`/`OFFSET`
+  placeholders on MySQL 8 even as real numbers (`ER_WRONG_ARGUMENTS`) — MariaDB is more lenient.
+  If a query needs `LIMIT`/`OFFSET`, validate the value is a real integer and inline it into the
+  SQL string rather than binding it as `?`.
+- **Dual persistence:** When writing data, save to both the database (MariaDB or MySQL 8, see
+  [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md)) *and* the `server/data/` (`/app/data/` on
+  Cloudron) JSON backups.
 - **Response speed:** Send `res.json()` immediately after the DB write. Run file-system backup writes (`fs.writeJson`) asynchronously in the background.
 - **Role enforcement:** Review endpoints must check the user's `user_type`. Return HTTP 403 for `translator` users.
 - **Filtering:** Use `getFilteredIndex` for project list queries — do not duplicate that logic.
@@ -45,8 +51,18 @@ The backend is a modular Express server. Routes are in `server/routes/`. The ent
 All schema changes must go through the migration system in `server/migrations/`. See [DATABASE.md](./DATABASE.md) for the full migration workflow.
 
 - Name files `NNN_description.sql` with zero-padded numbers.
-- Only use `ADD COLUMN IF NOT EXISTS` and `CREATE TABLE IF NOT EXISTS` — never `DROP` or `RENAME` without explicit coordination.
-- Test your migration locally before deploying to production.
+- Use `CREATE TABLE IF NOT EXISTS` freely (supported by both MariaDB and MySQL). **Do not use
+  `ADD COLUMN IF NOT EXISTS`** — it's a MariaDB-only extension; MySQL 8 (used on Cloudron, see
+  [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md)) rejects it outright. Plain `ADD COLUMN` is
+  fine as-is: `db_migrate.js` already tracks applied migrations in `schema_migrations` and never
+  re-runs one, and its catch block already treats a "Duplicate column" error as non-fatal if a
+  migration somehow runs twice.
+- Never `DROP` or `RENAME` without explicit coordination.
+- Test your migration locally before deploying to production — ideally against both a MariaDB
+  and a MySQL 8 instance if the change touches anything beyond a plain `ADD COLUMN`/`CREATE
+  TABLE` (see the compatibility notes in
+  [CLOUDRON_DEPLOYMENT.md, §4](CLOUDRON_DEPLOYMENT.md#4-mariadb--mysql-8-compatibility-notes) for
+  two real incompatibilities found this way — collations and generated-column dumps).
 
 ---
 
@@ -59,7 +75,7 @@ All schema changes must go through the migration system in `server/migrations/`.
 - Verify that a `translator` user cannot access the review queue (router redirect + HTTP 403 on the API).
 - Run `flutter analyze` before committing Flutter changes:
   ```bash
-  wsl bash -i -c "cd /var/www/pb_translation_hub/flutter_client && flutter analyze"
+  wsl bash -i -c "cd /var/www/pb_translation_hub-cloudron/flutter_client && flutter analyze"
   ```
 
 ---

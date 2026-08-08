@@ -2,9 +2,14 @@
 
 This document explains the JSON data structures used in the PB Translation Hub and how they facilitate synchronization and "stale" translation detection.
 
+> **Cloudron note:** paths below are written as `server/data/...`, matching the docker-compose
+> deployment. On Cloudron the same files live under `/app/data/...` instead (see
+> [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md)) — everything else on this page (schema,
+> sync logic, stale detection) is identical either way.
+
 ## 1. Source Metadata (Drupal.org)
 
-Stored in `server/data/metadata/*.json`. These files are mirrors of the Drupal.org JSON:API responses.
+Stored in `server/data/metadata/*.json` (`/app/data/metadata/*.json` on Cloudron). These files are mirrors of the Drupal.org JSON:API responses.
 
 | Key | Type | Description | Purpose in Hub |
 | :--- | :--- | :--- | :--- |
@@ -16,8 +21,8 @@ Stored in `server/data/metadata/*.json`. These files are mirrors of the Drupal.o
 
 ## 2. Hub-Internal Translations
 
-Stored in `server/data/translations/[langcode]/*.json` (file-system backup layer).
-The MariaDB `translations` table is the authoritative source for the API.
+Stored in `server/data/translations/[langcode]/*.json` (`/app/data/translations/[langcode]/*.json` on Cloudron) — a file-system backup layer.
+The `translations` database table (MariaDB in docker-compose, MySQL 8 on Cloudron) is the authoritative source for the API.
 
 | Key | Type | Description | Purpose in Hub |
 | :--- | :--- | :--- | :--- |
@@ -32,7 +37,7 @@ The MariaDB `translations` table is the authoritative source for the API.
 ## 3. Synchronization & Stale Detection Logic
 
 ### A. Incremental Database Sync
-When syncing module data from Drupal.org into MariaDB, the Hub stores the `attributes.changed` timestamp in `projects.changed`. During each sync pass, only modules whose `changed` value has increased are updated. This avoids rewriting records for unchanged modules.
+When syncing module data from Drupal.org into the database, the Hub stores the `attributes.changed` timestamp in `projects.changed`. During each sync pass, only modules whose `changed` value has increased are updated. This avoids rewriting records for unchanged modules.
 
 ### B. Smart Stale Detection
 A translation is marked as **Stale** only if the calculated MD5 hash of the current English source (`projects.data`) does not match the `source_hash` stored in the translation at the time it was created. This two-step verification prevents marking translations as stale when only non-textual metadata changes (like a maintainer reassignment) are pushed to Drupal.org.

@@ -1,6 +1,11 @@
 # Database Schema — PB Translation Hub
 
-MariaDB 11.8 · Datenbank: `pb_translation_hub` · User: `pb_hub`
+MariaDB 11.8 (docker-compose) bzw. MySQL 8.0.31 (Cloudron, siehe [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md)) · Datenbank: `pb_translation_hub` · User: `pb_hub`
+
+Schema und Queries unten sind für beide Engines identisch — die konkreten Unterschiede
+(Collation, generierte Spalten beim Dump-Import) sind in
+[CLOUDRON_DEPLOYMENT.md, Abschnitt 4](CLOUDRON_DEPLOYMENT.md#4-mariadb--mysql-8-compatibility-notes)
+dokumentiert.
 
 ---
 
@@ -10,7 +15,7 @@ MariaDB 11.8 · Datenbank: `pb_translation_hub` · User: `pb_hub`
 |---|---|
 | `projects` | Gespiegelte Modul-Metadaten von Drupal.org |
 | `translations` | Übersetzte Inhalte (multi-language) |
-| `priority_projects` | Priorisierungslisten (z.B. Drupal 11 Focus) |
+| `priority_projects` | Kuratierte Liste "wichtiger" Module. Der Priority-Filter selbst zeigt seit der Cloudron-Migration nicht mehr "auf der Liste + unübersetzt", sondern "auf der Liste + noch nicht Drupal-12-kompatibel" (`semver_max < 12000000`) |
 | `ignored_projects` | Dauerhaft aus Warteschlangen ausgeblendete Module |
 | `site_settings` | Globale App-Einstellungen (Key-Value) |
 | `users` | Benutzerkonten mit Rollen, API-Keys, Sprachzuordnung |
@@ -61,7 +66,7 @@ Definiert Priorisierungslisten für den Übersetzungsworkflow.
 | Feld | Typ | Beschreibung |
 |---|---|---|
 | `machine_name` | VARCHAR(255) PK | Modulname |
-| `list_name` | VARCHAR(50) PK | Listenkenner (Standard: `drupal11`) |
+| `list_name` | VARCHAR(50) PK | Listenkenner (Standard: `drupal11` — historischer Name, wird von der Filter-Logik nicht mehr ausgewertet; die Priority-Zugehörigkeit selbst entscheidet allein `machine_name`) |
 
 ---
 
@@ -198,9 +203,9 @@ server/migrations/
   001_initial_schema.sql              — Basis-Schema (alle Kern-Tabellen)
   002_users_deepl_key.sql             — deepl_api_key-Spalte
   003_users_registration_fields.sql   — target_languages + user_type
-  004_glossary_terms.sql              — glossary_terms Tabelle
-  005_create_glossary_terms.sql       — Indizes & Constraints
-  006_suggestion_type_deepl.sql       — ENUM-Erweiterung für DeepL-Vorschläge
+  004_users_requested_role.sql        — requested_role-Spalte (Registrierungswunsch)
+  005_create_glossary_terms.sql       — glossary_terms Tabelle + Indizes
+  006_suggestion_type_deepl.sql       — ENUM-Erweiterung für DeepL-Vorschläge + translation_suggestions CREATE (nachgetragen, siehe Migration selbst)
   007_glossary_word_forms.sql         — word_forms TEXT-Spalte in glossary_terms
   008_semver_columns.sql              — semver_min/max Generated Columns + Index
   009_sync_events.sql                 — sync_events Tabelle (Verlauf fürs Dashboard)
@@ -234,6 +239,10 @@ Beim Server-Start (`node index.js` bzw. Docker-Container-Start) ruft `db_migrate
 Schlägt eine Migration fehl, bricht der Server mit `process.exit(1)` ab — es gibt kein stilles Ignorieren.
 
 ### Migration auf dem Produktionsserver deployen
+
+> **Auf Cloudron** läuft das anders — kein `deploy.sh`, keine separaten Container. Siehe
+> [CLOUDRON_DEPLOYMENT.md, Abschnitt 5](CLOUDRON_DEPLOYMENT.md#5-updating-an-installed-app)
+> (`cloudron update`). Migrationen laufen dort genauso automatisch beim Server-Start.
 
 ```bash
 # Empfohlen: DB-Backup vor Schema-Änderung
@@ -290,6 +299,12 @@ ORDER BY user_type, username;
 ---
 
 ## Backup & Wiederherstellung
+
+> **Auf Cloudron:** `backup.sh`/`restore.sh` setzen auf docker-compose-Container voraus, die es
+> dort nicht gibt. Cloudron sichert die App bei jedem `cloudron update` automatisch (Snapshot).
+> Für den DB-Import/-Export siehe stattdessen
+> [CLOUDRON_DEPLOYMENT.md, Abschnitt 3a](CLOUDRON_DEPLOYMENT.md#3a-database) (`cloudron exec`
+> statt `docker exec`).
 
 ### Vollständiges Backup (empfohlen): `backup.sh` / `restore.sh`
 

@@ -40,7 +40,7 @@ Open `http://localhost:5173` in a browser.
 wsl bash -i -c "cd /var/www/pb_translation_hub/server && node index.js"
 
 # Flutter dev server
-wsl bash -i -c "cd /var/www/pb_translation_hub/flutter_client && flutter run -d web-server --web-port 5173 --web-hostname 0.0.0.0"
+wsl bash -i -c "cd /var/www/pb_translation_hub-cloudron/flutter_client && flutter run -d web-server --web-port 5173 --web-hostname 0.0.0.0"
 ```
 
 ### Hot-reload
@@ -420,6 +420,11 @@ The review screen has a collapsible off-canvas sidebar (default closed) containi
 ---
 
 ## 8. Docker Production Build
+
+> This section describes the docker-compose deployment (separate `client` container). On
+> Cloudron, the Flutter build is stage 1 of the root `Dockerfile` and gets served by the same
+> single container's nginx (`nginx/app.conf`, proxying to `127.0.0.1:9901` instead of
+> `server:9901`) — see [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md).
 
 The `flutter_client/Dockerfile` is a two-stage build:
 1. **Build stage** — compiles the Flutter web release with `flutter build web --release`.

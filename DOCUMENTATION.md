@@ -174,7 +174,7 @@ The Hub supports specialized workflow modes to focus your efforts:
 
 1. **All Projects:** Shows everything in the system.
 2. **Review Queue:** Shows translated projects awaiting human approval (reviewer/admin only).
-3. **Drupal 11 Focus (Priority):** Filters the list to only show modules explicitly compatible with Drupal 11.
+3. **Drupal 12 Focus (Priority):** Filters the curated priority-module list down to those not yet marked Drupal-12-compatible (`semver_max < 12000000`) — i.e. modules that most need attention as Drupal 10 approaches EOL.
 4. **Stale:** Shows translations where the English source has changed since the translation was made.
 
 ---
@@ -193,26 +193,26 @@ Use the included `hubctl.sh` script for easy management:
 
 ### Building for Production
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full production deployment guide including the rolling restart procedure and database backup workflow.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for the docker-compose production deployment guide (rolling restart, database backup workflow), or [CLOUDRON_DEPLOYMENT.md](./CLOUDRON_DEPLOYMENT.md) if deploying this Cloudron-packaged variant instead.
 
 ### Data Persistence & Backup
 
-- **Primary Storage:** MariaDB database `pb_translation_hub`.
-- **File-based Backup:** The system automatically mirrors all metadata and translations to `server/data/`.
-  - `server/data/metadata/` — original Drupal.org data snapshots
-  - `server/data/translations/` — per-language translation backups
+- **Primary Storage:** database `pb_translation_hub` (MariaDB in docker-compose, MySQL 8 on Cloudron).
+- **File-based Backup:** The system automatically mirrors all metadata and translations to `server/data/` (`/app/data/` on Cloudron).
+  - `metadata/` — original Drupal.org data snapshots
+  - `translations/` — per-language translation backups
 
-The `server/data/` folder provides a portable version of your translations that can be re-imported into a new database using `node migrate_to_mysql.js`.
+This folder provides a portable version of your translations that can be re-imported into a new database using `node migrate_to_mysql.js`.
 
 ---
 
 ## Deployment Guide
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for the complete step-by-step production deployment procedure, including the `deploy.sh` rolling restart script, the `--db-backup` flag, Nginx configuration, and the systemd service setup.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for the complete step-by-step docker-compose production deployment procedure (`deploy.sh` rolling restart script, the `--db-backup` flag, Nginx configuration, systemd service setup), or [CLOUDRON_DEPLOYMENT.md](./CLOUDRON_DEPLOYMENT.md) for the Cloudron equivalent.
 
-To connect a Drupal site to the Hub after deployment:
+To connect a Drupal site to the Hub after deployment (adjust the URL to wherever your instance actually runs):
 
 ```bash
-drush config:set pb_localizer.settings hub_url "https://pb.drupaltutorials.de" --yes
+drush config:set pb_localizer.settings hub_url "https://<your-hub-domain>" --yes
 drush config:set pb_localizer.settings hub_port "443" --yes
 ```
