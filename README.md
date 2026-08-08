@@ -7,6 +7,10 @@
 
 A self-hosted translation server that provides localized Drupal Project Browser metadata to the [Project Browser Localizer](https://drupal.org/project/pb_localizer) Drupal module.
 
+> This is the **Cloudron-packaged** variant. See [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md)
+> to install it on a Cloudron instance. For the original docker-compose deployment, see the
+> [unmodified upstream repo](https://github.com/nodedropweb/pb_translation_hub).
+
 ---
 
 ## Architecture

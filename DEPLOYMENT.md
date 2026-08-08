@@ -1,5 +1,11 @@
 # Deployment Guide: PB Translation Hub
 
+> **This repo is the Cloudron-packaged variant.** If you're deploying to Cloudron, see
+> [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md) instead — this document describes the
+> original docker-compose + `deploy.sh` deployment used by the
+> [unmodified upstream repo](https://github.com/nodedropweb/pb_translation_hub), which no longer
+> applies once you're running on Cloudron.
+
 This document describes the complete deployment process for the PB Translation Hub on the production server.
 
 ## Infrastructure Overview
