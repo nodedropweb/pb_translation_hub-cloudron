@@ -2,4 +2,4 @@
 -- Fügt deepl_api_key zur users-Tabelle hinzu.
 
 ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS deepl_api_key VARCHAR(255) DEFAULT NULL;
+  ADD COLUMN deepl_api_key VARCHAR(255) DEFAULT NULL;
