@@ -1,5 +1,7 @@
 # Cloudron Deployment Guide
 
+*[🇩🇪 Deutsche Version](CLOUDRON_DEPLOYMENT.de.md)*
+
 This document describes how to install, migrate data into, and update PB Translation Hub as a
 Cloudron app. It is written for a Drupal e.V. administrator taking over the packaged app for the
 first time.
