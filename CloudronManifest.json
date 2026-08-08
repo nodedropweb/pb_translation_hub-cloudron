@@ -1,16 +1,13 @@
 {
   "id": "de.drupaltv.pbtranslationhub",
   "version": "0.1.0",
-  "upstreamVersion": "",
   "minBoxVersion": "9.0.0",
   "title": "PB Translation Hub",
   "description": "file://DESCRIPTION.md",
   "tagline": "Übersetzungs-Hub für Drupal-Projektbeschreibungen",
   "website": "https://github.com/nodedropweb/pb_translation_hub",
-  "packageUrl": "",
   "packagerName": "nodedropweb",
   "packagerUrl": "https://github.com/nodedropweb",
-  "iconUrl": "file://logo.png",
   "healthCheckPath": "/",
   "mediaLinks": [],
   "httpPort": 3000,
@@ -18,7 +15,6 @@
   "changelog": "file://CHANGELOG.md",
   "postInstallMessage": "file://POSTINSTALL.md",
   "documentationUrl": "https://github.com/nodedropweb/pb_translation_hub",
-  "forumUrl": "",
   "addons": {
     "localstorage": {},
     "mysql": {}
