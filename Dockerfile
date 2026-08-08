@@ -36,7 +36,13 @@ RUN sed -i \
     /etc/nginx/nginx.conf
 
 COPY start.sh /app/code/start.sh
-RUN chmod +x /app/code/start.sh && \
+
+# The build context is uploaded from a Windows/WSL host over a UNC path,
+# which sometimes loses the execute bit on directories (e.g. routes/,
+# migrations/ came through as drw-rw-rw-, breaking require() traversal).
+# Normalize permissions regardless of what came through.
+RUN chmod -R a+rX /app/code && \
+    chmod +x /app/code/start.sh && \
     chown -R cloudron:cloudron /app/code
 
 CMD [ "/app/code/start.sh" ]
