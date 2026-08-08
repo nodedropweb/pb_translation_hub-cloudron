@@ -8,7 +8,7 @@
   "website": "https://github.com/nodedropweb/pb_translation_hub",
   "packagerName": "nodedropweb",
   "packagerUrl": "https://github.com/nodedropweb",
-  "iconUrl": "file://logo.png",
+  "iconUrl": "https://raw.githubusercontent.com/nodedropweb/pb_translation_hub-cloudron/master/logo.png",
   "healthCheckPath": "/",
   "mediaLinks": [],
   "httpPort": 3000,
