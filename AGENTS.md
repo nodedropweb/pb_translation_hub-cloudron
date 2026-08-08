@@ -1,5 +1,7 @@
 # AGENTS.md — Developer & AI Agent Reference
 
+*[🇩🇪 Deutsche Version](AGENTS.de.md)*
+
 Technical map of the PB Translation Hub for developers and AI coding agents.
 
 > **This is the Cloudron-packaged repo.** It runs as a single container behind Cloudron's own
