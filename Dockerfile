@@ -28,6 +28,13 @@ COPY nginx/app.conf /etc/nginx/sites-available/app
 RUN rm -f /etc/nginx/sites-enabled/* && \
     ln -s /etc/nginx/sites-available/app /etc/nginx/sites-enabled/app
 
+# nginx.conf's error_log is in the global context (outside http{}), so our
+# sites-enabled config can't override it — /var/log/nginx/* is read-only here.
+RUN sed -i \
+    -e 's#error_log /var/log/nginx/error.log;#error_log /dev/stderr;#' \
+    -e 's#access_log /var/log/nginx/access.log;#access_log /dev/stdout;#' \
+    /etc/nginx/nginx.conf
+
 COPY start.sh /app/code/start.sh
 RUN chmod +x /app/code/start.sh && \
     chown -R cloudron:cloudron /app/code
