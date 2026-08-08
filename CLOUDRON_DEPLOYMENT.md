@@ -41,7 +41,8 @@ Concrete example: the app should run at `pb.drupal.de`, using the prebuilt GHCR 
 
 A record for `pb.drupal.de` → the Cloudron server's IP (and `my.drupal.de` too, if this is the
 first app on the instance). Let it propagate before the next step, or Let's Encrypt issuance
-will fail.
+will fail. **If the server has an IPv6 address, a matching AAAA record is also required** — see
+the [DNS section below](#dns) for details.
 
 **2. Install**
 
@@ -138,6 +139,14 @@ noticeably slower and it ties up CPU on the server while building.
 Cloudron needs an A record for `<subdomain>.<your-domain>` (and, if this is the first app on a
 fresh Cloudron instance, one for `my.<your-domain>` too) pointing at the server's IP **before**
 installing — the install step provisions a Let's Encrypt certificate via HTTP validation.
+
+> **IPv6 note:** if the Cloudron server has an IPv6 address, Cloudron detects this automatically
+> and additionally requires a matching **AAAA record** for the same subdomain as part of the
+> certificate check. If that record is missing, or points at a stale/wrong address, certificate
+> issuance or renewal can fail or hang — even though the A record is correct. Two options: add a
+> correct AAAA record for the subdomain, or disable IPv6 support in Cloudron's network settings
+> to skip the check. If the server has no IPv6 address at all, the check is skipped automatically
+> and a plain A record is enough.
 
 ---
 

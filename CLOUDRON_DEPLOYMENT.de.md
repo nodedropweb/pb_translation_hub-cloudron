@@ -43,7 +43,8 @@ Konkretes Beispiel: Die App soll unter `pb.drupal.de` laufen, per vorgebautem Im
 
 A-Record `pb.drupal.de` → IP des Cloudron-Servers (und `my.drupal.de`, falls dies die erste App
 auf der Instanz ist). Vor dem nächsten Schritt propagieren lassen, sonst schlägt die
-Let's-Encrypt-Ausstellung fehl.
+Let's-Encrypt-Ausstellung fehl. **Hat der Server eine IPv6-Adresse, wird zusätzlich ein
+passender AAAA-Record benötigt** — Details dazu im [DNS-Abschnitt unten](#dns).
 
 **2. Installieren**
 
@@ -144,6 +145,15 @@ Cloudron braucht einen A-Record für `<subdomain>.<deine-domain>` (und, falls di
 auf einer frischen Cloudron-Instanz ist, auch einen für `my.<deine-domain>`), der **vor** der
 Installation auf die Server-IP zeigt — der Install-Schritt stellt per HTTP-Validierung ein
 Let's-Encrypt-Zertifikat aus.
+
+> **IPv6-Hinweis:** Hat der Cloudron-Server eine IPv6-Adresse, erkennt Cloudron das automatisch
+> und verlangt beim Zertifikats-Check zusätzlich zum A- auch einen passenden **AAAA-Record** für
+> dieselbe Subdomain. Fehlt dieser oder zeigt er auf eine falsche/veraltete Adresse, kann die
+> Zertifikatsausstellung bzw. -erneuerung fehlschlagen oder hängen bleiben — selbst wenn der
+> A-Record korrekt ist. Zwei Optionen: entweder einen korrekten AAAA-Record für die Subdomain
+> anlegen, oder den IPv6-Support in den Cloudron-Netzwerkeinstellungen deaktivieren, um den Check
+> zu überspringen. Hat der Server gar keine IPv6-Adresse, entfällt die Prüfung von selbst und ein
+> reiner A-Record genügt.
 
 ---
 
