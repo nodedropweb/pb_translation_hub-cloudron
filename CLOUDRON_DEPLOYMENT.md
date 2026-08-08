@@ -26,16 +26,6 @@ Concrete example: the app should run at `pb.drupal.de`, using the prebuilt GHCR 
    ```bash
    cloudron login my.drupal.de
    ```
-3. **Make sure the GHCR image is actually reachable.** The package
-   `ghcr.io/nodedropweb/pb_translation_hub-cloudron` is currently **not publicly visible**
-   (verified: an anonymous visitor sees nothing on the account's Packages page, even though the
-   repo itself is public). Without one of the following, the pull will fail on a fresh Cloudron
-   server:
-   - **Recommended:** set the package to "Public" on GitHub (package page → "Package settings" →
-     "Change visibility"). The source is already public in the repo, so the image doesn't expose
-     anything additional.
-   - **Alternative:** run `docker login ghcr.io` on the Cloudron server itself with a GitHub
-     personal access token that has `read:packages` scope on the package.
 
 **1. Set up DNS**
 

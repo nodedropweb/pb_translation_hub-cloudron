@@ -28,16 +28,6 @@ Konkretes Beispiel: Die App soll unter `pb.drupal.de` laufen, per vorgebautem Im
    ```bash
    cloudron login my.drupal.de
    ```
-3. **Zugriff auf das GHCR-Image sicherstellen.** Das Package
-   `ghcr.io/nodedropweb/pb_translation_hub-cloudron` ist aktuell **nicht öffentlich sichtbar**
-   (geprüft: als anonymer Besucher zeigt die Packages-Seite des Accounts nichts an, obwohl das
-   Repo selbst öffentlich ist). Ohne einen der folgenden Schritte schlägt der Pull auf einem
-   fremden Cloudron-Server fehl:
-   - **Empfohlen:** Package auf GitHub auf „Public" stellen (Package-Seite →
-     „Package settings" → „Change visibility"). Der Quellcode im Repo ist ohnehin bereits
-     öffentlich, das Image enthält nichts zusätzlich Schützenswertes.
-   - **Alternativ:** Auf dem Cloudron-Server selbst `docker login ghcr.io` mit einem
-     GitHub-Personal-Access-Token ausführen, das Leserechte (`read:packages`) auf das Package hat.
 
 **1. DNS anlegen**
 
