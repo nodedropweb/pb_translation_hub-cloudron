@@ -298,8 +298,13 @@ async function getFilteredIndex(filter, search, langcode, limit = null, offset =
   params.push(...orderParams);
 
   if (limit !== null) {
-    query += ` LIMIT ? OFFSET ? `;
-    params.push(parseInt(limit), parseInt(offset));
+    // mysql2's execute() (server-side prepared statements) rejects bound
+    // LIMIT/OFFSET placeholders on MySQL 8 with ER_WRONG_ARGUMENTS, even
+    // when passed as real numbers — MariaDB is more lenient here. Safe to
+    // inline directly since both are parseInt()'d/guarded against NaN.
+    const safeLimit = Number.isInteger(parseInt(limit)) ? parseInt(limit) : 50;
+    const safeOffset = Number.isInteger(parseInt(offset)) ? parseInt(offset) : 0;
+    query += ` LIMIT ${safeLimit} OFFSET ${safeOffset} `;
   }
 
   const [rows] = await db.execute(query, params);
