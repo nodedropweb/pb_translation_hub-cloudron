@@ -1,5 +1,7 @@
 # Data Structure & Sync Logic
 
+*[🇩🇪 Deutsche Version](DATA_STRUCTURE.de.md)*
+
 This document explains the JSON data structures used in the PB Translation Hub and how they facilitate synchronization and "stale" translation detection.
 
 > **Cloudron note:** paths below are written as `server/data/...`, matching the docker-compose

@@ -1,5 +1,7 @@
 # Contributing to PB Translation Hub
 
+*[🇩🇪 Deutsche Version](CONTRIBUTING.de.md)*
+
 ## Getting Started
 
 1. Clone the repository.

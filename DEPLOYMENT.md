@@ -1,5 +1,7 @@
 # Deployment Guide: PB Translation Hub
 
+*[🇩🇪 Deutsche Version](DEPLOYMENT.de.md)*
+
 > **This repo is the Cloudron-packaged variant.** If you're deploying to Cloudron, see
 > [CLOUDRON_DEPLOYMENT.md](CLOUDRON_DEPLOYMENT.md) instead — this document describes the
 > original docker-compose + `deploy.sh` deployment used by the

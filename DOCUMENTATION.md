@@ -1,5 +1,7 @@
 # Project Browser Translation Hub — Documentation
 
+*[🇩🇪 Deutsche Version](DOCUMENTATION.de.md)*
+
 *See also: [DATABASE.md](./DATABASE.md) for technical schema details.*
 
 ## Overview: What is this?

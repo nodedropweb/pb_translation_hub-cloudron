@@ -1,5 +1,7 @@
 # PB Translation Hub
 
+*[🇩🇪 Deutsche Version](README.de.md)*
+
 [![Drupal](https://img.shields.io/badge/Drupal-10.x%20%7C%2011.x-blue.svg)](https://drupal.org)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org)
 [![Flutter](https://img.shields.io/badge/Flutter-stable-54C5F8.svg)](https://flutter.dev)
