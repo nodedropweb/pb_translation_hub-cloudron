@@ -1,5 +1,7 @@
 # Flutter Client — Technical Reference
 
+*[🇩🇪 Deutsche Version](FLUTTER_DOCUMENTATION.de.md)*
+
 The Flutter client is the primary (and only) frontend for the PB Translation Hub. It runs as a web app in development, is served via Nginx in Docker production, and can also compile as a native Android or desktop application.
 
 ---
@@ -203,37 +205,37 @@ Flutter boot
                  └─ _ckApplyGlossaryMarkers(editor)  ← per active CKEditor
 ```
 
-### Wortformen (Plurale, flektierte Formen)
+### Word Forms (plurals, inflected forms)
 
-Jeder Glossar-Eintrag kann neben der Grundform (`source_word`) beliebig viele flektierte Formen speichern (Feld `word_forms` als Komma-getrennte Liste in der DB, im API immer als Array). Die Flutter-UI zeigt diese Formen als Chips im Bearbeitungsdialog; über das Textfeld + „+"-Button lassen sich neue Formen hinzufügen, per „✕"-Chip entfernen.
+Alongside the base form (`source_word`), each glossary entry can store any number of inflected forms (`word_forms` field, stored as a comma-separated list in the DB, always an array over the API). The Flutter UI shows these forms as chips in the edit dialog; a text field + "+" button adds new forms, "✕" chips remove them.
 
-Beispiel: `source_word = "Inhalt"`, `word_forms = ["Inhalte", "Inhalts", "Inhalten"]` → CKEditor erkennt alle vier Schreibweisen.
+Example: `source_word = "Inhalt"`, `word_forms = ["Inhalte", "Inhalts", "Inhalten"]` → CKEditor recognizes all four spellings.
 
 ### CKEditor 5 plugin (`web/index.html`)
 
-#### Marker-Format
-`GlossaryHighlightPlugin` registriert einen `editingDowncast`-Konverter (`markerToHighlight`), der Modell-Marker in `<span class="ck-glossary-highlight" data-matched="…" data-preferred="…" data-explanation="…">` im Bearbeitungsbereich umwandelt — **nur in der Editing View**, `getData()` bleibt unberührt (`affectsData: false`).
+#### Marker format
+`GlossaryHighlightPlugin` registers an `editingDowncast` converter (`markerToHighlight`) that turns model markers into `<span class="ck-glossary-highlight" data-matched="…" data-preferred="…" data-explanation="…">` in the editing area — **editing view only**, `getData()` stays untouched (`affectsData: false`).
 
-Marker-Name-Format: `glossaryTerm:<termId>:<uid>:<encodedMatchedForm>`
+Marker name format: `glossaryTerm:<termId>:<uid>:<encodedMatchedForm>`
 
-- `<termId>` — Datenbank-ID des Glossar-Eintrags
-- `<uid>` — fortlaufender Zähler (garantiert Eindeutigkeit)
-- `<encodedMatchedForm>` — `encodeURIComponent(match[0])`, also die exakte Zeichenkette, die im Text gefunden wurde (z.B. `Inhalte`)
+- `<termId>` — database ID of the glossary entry
+- `<uid>` — running counter (guarantees uniqueness)
+- `<encodedMatchedForm>` — `encodeURIComponent(match[0])`, i.e. the exact string found in the text (e.g. `Inhalte`)
 
-#### Marker-Anwendung (`_ckApplyGlossaryMarkers`)
-1. Alle bestehenden `glossaryTerm:*`-Marker werden entfernt.
-2. Jedes Block-Element, das `$text` enthalten kann, wird durchlaufen.
-3. Pro Term wird eine RegExp-Alternation aus `source_word` + allen `word_forms` gebaut:
+#### Marker application (`_ckApplyGlossaryMarkers`)
+1. All existing `glossaryTerm:*` markers are removed.
+2. Every block element that can contain `$text` is traversed.
+3. Per term, a regex alternation is built from `source_word` + all `word_forms`:
    ```
    \b(Inhalt|Inhalte|Inhalts|Inhalten)\b   (gi)
    ```
-4. Jeder Match wird als Marker mit der exakten gematchten Form im Namen gespeichert.
-5. Der Downcast-Konverter schreibt die gematchte Form als `data-matched`-Attribut ans `<span>`.
+4. Every match is stored as a marker with the exact matched form in its name.
+5. The downcast converter writes the matched form as a `data-matched` attribute on the `<span>`.
 
-#### Marker werden erneuert bei:
-- Aufruf von `setGlobalGlossary()` (Erstload oder Sprachwechsel).
-- 300 ms nach jedem `change:data`-Event (debounced) — Content-Änderungen verlieren keine Highlights.
-- Neuinitialisierung eines Editors, wenn `globalGlossary` bereits befüllt ist.
+#### Markers are refreshed on:
+- A call to `setGlobalGlossary()` (initial load or language switch).
+- 300 ms after every `change:data` event (debounced) — content changes never lose highlights.
+- Re-initialization of an editor if `globalGlossary` is already populated.
 
 ### Dart utilities (`lib/utils/ck_glossary.dart`)
 | Function | Purpose |
@@ -254,27 +256,27 @@ Both functions are no-ops on non-web platforms (`kIsWeb` guard).
 
 ### Floating Tooltip
 
-Beim Hover über ein markiertes Wort erscheint `#_ck_glossary_tip`. Der Tooltip unterscheidet zwei Fälle:
+Hovering over a marked word shows `#_ck_glossary_tip`. The tooltip distinguishes two cases:
 
-**Fall A — flektierte Form gefunden** (z.B. „Inhalte" im Text, Grundform ist „Inhalt"):
+**Case A — inflected form found** (e.g. "Inhalte" in the text, base form is "Inhalt"):
 ```
-💡  Glossar-Hinweis
-    Inhalte                ← data-matched (weiß, 13 px)
-    ↓ bevorzugte Übersetzung
-    Inhalt                 ← data-preferred (lila, 15 px fett)
+💡  Glossary hint
+    Inhalte                ← data-matched (white, 13 px)
+    ↓ preferred translation
+    Inhalt                 ← data-preferred (purple, 15 px bold)
     ─────────────────────
-    [Erklärungstext]
+    [Explanation text]
 ```
 
-**Fall B — Grundform gefunden** (Matched-Form == Preferred-Word):
+**Case B — base form found** (matched form == preferred word):
 ```
-💡  Glossar-Hinweis
-    Inhalt                 ← direkt lila, 15 px fett, kein Pfeil
+💡  Glossary hint
+    Inhalt                 ← directly purple, 15 px bold, no arrow
     ─────────────────────
-    [Erklärungstext]
+    [Explanation text]
 ```
 
-Das `data-matched`-Attribut enthält immer die exakte Zeichenkette aus dem Text (Groß-/Kleinschreibung wie im Original). Der Vergleich für Fall A/B ist case-insensitive.
+The `data-matched` attribute always contains the exact string from the text (casing as in the original). The comparison for Case A/B is case-insensitive.
 
 ### Glossary management screen (`lib/screens/glossary/glossary_screen.dart`)
 Route `/glossary`, accessible from the sidebar. Reviewers and admins can:
@@ -282,8 +284,8 @@ Route `/glossary`, accessible from the sidebar. Reviewers and admins can:
 - Add a new term (source word, preferred word, optional explanation, word forms).
 - Edit or delete existing terms.
 
-**Wortformen-UI im Dialog:**  
-Unter dem Feld „Quellwort (Grundform)" befindet sich ein Chip-Eingabebereich. Formen werden über ein Textfeld + „+"-Button hinzugefügt und als Chips mit „✕" einzeln entfernt. Die Liste wird als `word_forms`-Array an die API gesendet und in der Tabellenzeile als kleinere Amber-Chips neben dem Grundform-Badge angezeigt.
+**Word-forms UI in the dialog:**  
+Below the "Source word (base form)" field is a chip input area. Forms are added via a text field + "+" button and removed individually via "✕" chips. The list is sent to the API as a `word_forms` array and shown in the table row as smaller amber chips next to the base-form badge.
 
 Changes take effect in open editors after the next `loadCkEditorGlossary` call (e.g. on the next screen navigation or language switch).
 
@@ -305,7 +307,7 @@ Changes take effect in open editors after the next `loadCkEditorGlossary` call (
   "explanation":    "Bitte die standardisierte deutsche Bezeichnung verwenden."
 }
 ```
-Das Backend nimmt `word_forms` als Array entgegen, speichert es als komma-getrennten String in der DB und gibt es in GET/POST/PUT-Antworten immer als Array zurück.
+The backend accepts `word_forms` as an array, stores it as a comma-separated string in the DB, and always returns it as an array in GET/POST/PUT responses.
 
 ---
 
