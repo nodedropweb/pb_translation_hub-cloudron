@@ -1,5 +1,7 @@
 # Changelog
 
+*[🇩🇪 Deutsche Version](CHANGELOG.de.md)*
+
 All notable changes to this project are documented in this file.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
@@ -11,53 +13,53 @@ Dates are in `YYYY-MM-DD` format.
 
 ### Added
 
-#### Analyse-Dashboard — Kompatibilität, Übersetzungsbedarf & Wochen-Verläufe
-- **`server/migrations/009_sync_events.sql`** — neue Tabelle `sync_events` (Verlauf von `new_module` / `description_changed` / `stale` mit `event_date`).
-- **`server/index.js`** — Helper `recordSyncEvents()` protokolliert vor jedem `projects`-Upsert neue Module, geänderte Beschreibungen und dadurch veraltete Übersetzungen (pro Sprache); in `syncProjects()` und allen Sync-Pfaden in **`server/routes/sync.js`** eingebunden.
-- **`server/routes/dashboard.js`** — neuer Endpoint `GET /dashboard/weekly?type=new_description|stale&weeks=&langcode=` (Wochenbuckets + Modullisten). Kompatibilität/Bedarf nutzt weiterhin `/projects/filter-counts`.
-- **`server/scripts/backfill_sync_events.js`** — einmaliger, idempotenter Backfill des Verlaufs aus `projects.changed`.
-- **`flutter_client/lib/screens/analytics/analytics_screen.dart`** + **`providers/analytics_provider.dart`** — neuer „Statistik"-Screen (Route `/analytics`, Nav-Eintrag): Übersetzungsbedarf-Karten, Kompatibilitäts-Balken pro Drupal 9–12, zwei ausklappbare Wochenlisten (neue Beschreibungen / veraltet markiert).
+#### Analytics Dashboard — Compatibility, Translation Needs & Weekly Trends
+- **`server/migrations/009_sync_events.sql`** — new `sync_events` table (history of `new_module` / `description_changed` / `stale` with `event_date`).
+- **`server/index.js`** — `recordSyncEvents()` helper logs new modules, changed descriptions, and translations thereby made stale (per language) before every `projects` upsert; wired into `syncProjects()` and all sync paths in **`server/routes/sync.js`**.
+- **`server/routes/dashboard.js`** — new endpoint `GET /dashboard/weekly?type=new_description|stale&weeks=&langcode=` (weekly buckets + module lists). Compatibility/need is still served by `/projects/filter-counts`.
+- **`server/scripts/backfill_sync_events.js`** — one-time, idempotent backfill of the history from `projects.changed`.
+- **`flutter_client/lib/screens/analytics/analytics_screen.dart`** + **`providers/analytics_provider.dart`** — new "Analytics" screen (route `/analytics`, nav entry): translation-need cards, compatibility bars per Drupal 9–12, two expandable weekly lists (new descriptions / marked stale).
 
-#### Vollständiges Backup & Restore (DB + Übersetzungs-/Kategorie-Dateien)
-- **`backup.sh`** / **`restore.sh`** — sichern bzw. restaurieren DB-Dump **und** den `data/translations/`-Baum (inkl. `_categories.json`, das nur als Datei existiert) in/aus einem Archiv `backups/pb_hub_backup_<stamp>.tar.gz`. Modi `--local` und Live-Server per SSH.
+#### Full Backup & Restore (DB + translation/category files)
+- **`backup.sh`** / **`restore.sh`** — back up or restore the DB dump **and** the `data/translations/` tree (including `_categories.json`, which only exists as a file) into/from a single `backups/pb_hub_backup_<stamp>.tar.gz` archive. `--local` mode and live server via SSH.
 
-#### Stale-Massen-Übersetzung — alle veralteten Module per Knopfdruck neu übersetzen
-- **`server/routes/ai.js`** — neuer Endpoint `GET /ai/stale-machine-names?langcode=X`: liefert alle Machine-Names, deren `source_hash` nicht mehr mit dem aktuellen englischen Text übereinstimmt, direkt aus der DB (kein Pagination-Limit).
-- **`flutter_client/lib/screens/dashboard/dashboard_screen.dart`** — `_showStaleBulkTranslateDialog()`: spezieller Dialog für den Stale-Filter, der alle veralteten Module vorab abruft, Gesamtanzahl und Kostenschätzung anzeigt und ohne Count-Dropdown direkt startet.
-- **`_executeBulkTranslationWithNames()`** — neue Methode, die eine explizite Machine-Name-Liste in Batches à 4 an `/ai/translate-bulk` schickt; orangefarbener Progress-Dialog; aktualisiert nach Abschluss automatisch den Stale-Filter.
+#### Stale Bulk Translation — retranslate every stale module with one click
+- **`server/routes/ai.js`** — new endpoint `GET /ai/stale-machine-names?langcode=X`: returns every machine name whose `source_hash` no longer matches the current English text, straight from the DB (no pagination limit).
+- **`flutter_client/lib/screens/dashboard/dashboard_screen.dart`** — `_showStaleBulkTranslateDialog()`: dedicated dialog for the stale filter that pre-fetches all stale modules, shows the total count and cost estimate, and starts directly without a count dropdown.
+- **`_executeBulkTranslationWithNames()`** — new method that sends an explicit machine-name list to `/ai/translate-bulk` in batches of 4; orange progress dialog; automatically refreshes the stale filter on completion.
 
-#### Stale-Erkennung — veraltete Übersetzungen anzeigen & beheben
-- **`server/routes/projects.js`** — `/projects/:machine_name` berechnet jetzt einen MD5-Hash über `title + body.summary + body.value` und vergleicht ihn mit `translations.source_hash`. Weicht der Hash ab, liefert die API `status: 'stale'`.
-- **`flutter_client/lib/screens/editor/editor_screen.dart`** — neues Feld `_isStale`; wird beim Laden gesetzt, wenn der API-Status `'stale'` ist. Bei veralteter Übersetzung öffnet sich die englische Quell-Seitenleiste automatisch.
-- **`flutter_client/lib/screens/editor/_editor_build_methods.dart`** — orangefarbener „Veraltet — Details"-Button in der Editor-Toolbar; öffnet `_showStaleDialog()`. Neue Methode `_useEnglishSource()` ersetzt Zusammenfassung und Body mit dem aktuellen englischen Original und setzt `_isStale` zurück.
+#### Stale Detection — show and fix outdated translations
+- **`server/routes/projects.js`** — `/projects/:machine_name` now computes an MD5 hash over `title + body.summary + body.value` and compares it against `translations.source_hash`. If the hash differs, the API returns `status: 'stale'`.
+- **`flutter_client/lib/screens/editor/editor_screen.dart`** — new `_isStale` field; set on load when the API status is `'stale'`. For a stale translation, the English source sidebar opens automatically.
+- **`flutter_client/lib/screens/editor/_editor_build_methods.dart`** — orange "Stale — Details" button in the editor toolbar; opens `_showStaleDialog()`. New `_useEnglishSource()` method replaces the summary and body with the current English original and resets `_isStale`.
 
-#### Diff-Ansicht — Übersetzung vs. englische Quelle
-- **`flutter_client/lib/utils/diff_utils.dart`** — Wort-Diff-Algorithmus (`DiffSpan`, `DiffOp`: equal / insert / delete). Liefert eine Liste von `DiffSpan`-Objekten für zwei Texte.
-- **`flutter_client/lib/widgets/diff_view.dart`** — `DiffView`-Widget (inline farbkodierter Diff) und `showDiffSheet()` (Bottom-Sheet mit zweispaltigem Vergleich). Grün = Einfügung, Rot = Löschung.
-- **`flutter_client/lib/screens/review/review_screen.dart`** — neuer „DIFF"-Button im Review-Screen-Header: öffnet `showDiffSheet()` mit Übersetzung (links) vs. englischer Quelle (rechts).
+#### Diff View — translation vs. English source
+- **`flutter_client/lib/utils/diff_utils.dart`** — word-diff algorithm (`DiffSpan`, `DiffOp`: equal / insert / delete). Returns a list of `DiffSpan` objects for two texts.
+- **`flutter_client/lib/widgets/diff_view.dart`** — `DiffView` widget (inline colour-coded diff) and `showDiffSheet()` (bottom sheet with a two-column comparison). Green = insertion, red = deletion.
+- **`flutter_client/lib/screens/review/review_screen.dart`** — new "DIFF" button in the review screen header: opens `showDiffSheet()` with the translation (left) vs. the English source (right).
 
-#### Debug-Sync-Endpunkte (geschützt via `PB_DEBUG_KEY`)
-- **`server/routes/sync.js`** — drei neue Routen, nur erreichbar mit korrektem `X-PB-Debug-Key`-Header:
-  - `GET /debug/sync/inspect/:machine_name` — vergleicht DB-Stand mit Live-Daten von Drupal.org (Title, Changed, Body-Länge).
-  - `POST /debug/sync/force/:machine_name` — erzwingt Einzelmodul-Sync von Drupal.org in DB + Metadaten-Verzeichnis.
-  - `POST /debug/sync/quick` — führt Quick-Sync für ein konfigurierbares Zeitfenster (`days`, Standard: 7) durch und gibt ein detailliertes Log zurück.
+#### Debug Sync Endpoints (protected via `PB_DEBUG_KEY`)
+- **`server/routes/sync.js`** — three new routes, only reachable with the correct `X-PB-Debug-Key` header:
+  - `GET /debug/sync/inspect/:machine_name` — compares the DB state against live data from Drupal.org (title, changed, body length).
+  - `POST /debug/sync/force/:machine_name` — forces a single-module sync from Drupal.org into the DB + metadata directory.
+  - `POST /debug/sync/quick` — runs a quick sync for a configurable time window (`days`, default: 7) and returns a detailed log.
 
-#### Automatischer Quick-Sync alle 7,5 Tage
-- **`server/index.js`** — `scheduleQuickSync()` startet einen `setInterval` (7,5 Tage) nach dem Server-Start. Überspringt automatisch, wenn bereits ein Sync läuft oder kein `lastFullSync`-Timestamp vorhanden ist.
+#### Automatic Quick Sync every 7.5 days
+- **`server/index.js`** — `scheduleQuickSync()` starts a `setInterval` (7.5 days) after the server starts. Automatically skips if a sync is already running or no `lastFullSync` timestamp exists.
 
-#### App-Icons (Android / iOS / Windows)
-- **`appicons/`** — vollständige Icon-Sets für alle Plattformen hinzugefügt (Android Launcher-Icons, iOS-Größen 16–1024 px, Windows Tiles, Splash Screens, Store Logo).
+#### App Icons (Android / iOS / Windows)
+- **`appicons/`** — full icon sets added for all platforms (Android launcher icons, iOS sizes 16–1024 px, Windows tiles, splash screens, store logo).
 
-#### Deutsches Intro-Audio
-- **`flutter_client/web/audio/crwb_de.mp3`** — deutschsprachige Audioversion des Project-Browser-Localizer-Intros (ElevenLabs-Generierung) aktualisiert.
+#### German Intro Audio
+- **`flutter_client/web/audio/crwb_de.mp3`** — updated German-language audio version of the Project Browser Localizer intro (ElevenLabs generation).
 
 ### Fixed
 
 #### CKEditor — `<img>` Tags Preserved
 - **`flutter_client/web/index.html`** — Added `img` to `htmlSupport.allow` configuration to prevent CKEditor 5 from stripping `<img>` tags on initialization or saving.
 
-#### Docker — PM2-Cluster deaktiviert
-- **`server/Dockerfile`** — PM2 läuft jetzt mit `-i 1` (Single-Instance) statt `-i max`. Cluster-Modus würde konkurrierende Sync-Prozesse erzeugen, da der Sync-Status im RAM gehalten wird.
+#### Docker — PM2 Cluster Disabled
+- **`server/Dockerfile`** — PM2 now runs with `-i 1` (single instance) instead of `-i max`. Cluster mode would create competing sync processes, since sync state is held in RAM.
 
 ---
 
@@ -65,29 +67,29 @@ Dates are in `YYYY-MM-DD` format.
 
 ### Added
 
-#### Glossary — Wortformen (Plurale & flektierte Formen)
-- **`server/migrations/007_glossary_word_forms.sql`** — neue Spalte `word_forms TEXT NULL` in `glossary_terms`. Speichert kommagetrennte flektierte Formen (Plural, Genitiv, Dativ usw.), z.B. `"Inhalte,Inhalts,Inhalten"`.
-- **`server/routes/glossary.js`** — GET normalisiert `word_forms` von Komma-String zu Array; POST/PUT nehmen ein `word_forms`-Array entgegen, speichern als String, geben in der Antwort wieder Array zurück.
-- **`flutter_client/web/index.html`** — `_ckApplyGlossaryMarkers` baut pro Term eine RegExp-Alternation aus `source_word` + allen `word_forms`: `\b(Inhalt|Inhalte|Inhalts|Inhalten)\b`. Die exakte gematchte Form wird als `encodeURIComponent`-kodiertes Segment in den Marker-Namen geschrieben (`glossaryTerm:<id>:<uid>:<encodedForm>`).
-- **`GlossaryHighlightPlugin`** — dekodiert die gematchte Form aus dem Marker-Namen und schreibt sie als `data-matched`-Attribut ans Highlight-`<span>`. Zusätzlich zu den bestehenden `data-preferred` und `data-explanation`.
-- **Glossar-Tooltip** — zeigt jetzt die konkrete im Text gefundene Wortform an:
-  - *Flektierte Form* (z.B. „Inhalte"): kleiner weißer Label „Inhalte" + Pfeil „↓ bevorzugte Übersetzung" + lila/fett „Inhalt".
-  - *Grundform* (matched == preferred): nur die Grundform lila/fett, kein Pfeil.
-- **`flutter_client/lib/screens/glossary/glossary_screen.dart`** — Chip-UI für Wortformen im Bearbeitungsdialog: Textfeld + „+"-Button zum Hinzufügen, „✕"-Chips zum Entfernen. In der Tabellenzeile werden Wortformen als kleinere Amber-Mini-Chips neben dem Grundform-Badge angezeigt.
+#### Glossary — Word Forms (plurals & inflected forms)
+- **`server/migrations/007_glossary_word_forms.sql`** — new `word_forms TEXT NULL` column on `glossary_terms`. Stores comma-separated inflected forms (plural, genitive, dative, etc.), e.g. `"Inhalte,Inhalts,Inhalten"`.
+- **`server/routes/glossary.js`** — GET normalizes `word_forms` from a comma-string to an array; POST/PUT accept a `word_forms` array, store it as a string, and return an array again in the response.
+- **`flutter_client/web/index.html`** — `_ckApplyGlossaryMarkers` builds a regex alternation per term from `source_word` + all `word_forms`: `\b(Inhalt|Inhalte|Inhalts|Inhalten)\b`. The exact matched form is written as an `encodeURIComponent`-encoded segment into the marker name (`glossaryTerm:<id>:<uid>:<encodedForm>`).
+- **`GlossaryHighlightPlugin`** — decodes the matched form from the marker name and writes it as a `data-matched` attribute on the highlight `<span>`, in addition to the existing `data-preferred` and `data-explanation`.
+- **Glossary tooltip** — now shows the specific word form found in the text:
+  - *Inflected form* (e.g. "Inhalte"): small white label "Inhalte" + arrow "↓ preferred translation" + purple/bold "Inhalt".
+  - *Base form* (matched == preferred): only the base form, purple/bold, no arrow.
+- **`flutter_client/lib/screens/glossary/glossary_screen.dart`** — chip UI for word forms in the edit dialog: text field + "+" button to add, "✕" chips to remove. In the table row, word forms are shown as smaller amber mini-chips next to the base-form badge.
 
-#### Einstellung: Automatische Absatzformatierung (Auto-P)
-- **`flutter_client/lib/providers/theme_provider.dart`** — neues Feld `autoAutop: bool` in `ThemeState`, persistiert als `pb-autoAutop` in `SharedPreferences`. Standard: `false`. Neue Methode `setAutoAutop(bool)`.
-- **`flutter_client/lib/screens/settings/settings_screen.dart`** — Switch-Toggle im Bereich „Workflow & Spaß", direkt unter dem Large-UI-Toggle. Zweisprachig: DE „Automatische Absatzformatierung (¶ Auto-P)" / EN „Automatic Paragraph Formatting (¶ Auto-P)".
-- **`flutter_client/lib/screens/review/review_screen.dart`** — am Ende von `_fetchData()`, nachdem alle Felder mit Inhalt befüllt wurden, wird `_autop()` automatisch auf Summary und Body angewendet, wenn `themeState.autoAutop == true`. Identisches Verhalten zum manuellen ¶-Button, aber ohne Snackbar-Meldung.
+#### Setting: Automatic Paragraph Formatting (Auto-P)
+- **`flutter_client/lib/providers/theme_provider.dart`** — new `autoAutop: bool` field on `ThemeState`, persisted as `pb-autoAutop` in `SharedPreferences`. Default: `false`. New `setAutoAutop(bool)` method.
+- **`flutter_client/lib/screens/settings/settings_screen.dart`** — switch toggle in the "Workflow & Fun" section, right below the large-UI toggle. Bilingual: DE "Automatische Absatzformatierung (¶ Auto-P)" / EN "Automatic Paragraph Formatting (¶ Auto-P)".
+- **`flutter_client/lib/screens/review/review_screen.dart`** — at the end of `_fetchData()`, after all fields have been populated with content, `_autop()` is automatically applied to the summary and body if `themeState.autoAutop == true`. Identical behaviour to the manual ¶ button, but without the snackbar message.
 
 ### Fixed
 
-#### CKEditor — Init-Race-Condition
-- **`flutter_client/web/index.html`** (`_ckBridge.init`) — `document.getElementById('cke_editor_<id>')` wird jetzt bis zu 10× mit 200 ms Abstand wiederholt, falls das DOM-Element beim ersten Aufruf noch nicht im Dokument ist. Zusätzlicher Retry (bis zu 3×, 500 ms) bei `ClassicEditor.create()`-Rejection.
-- **`flutter_client/lib/widgets/ckeditor_field_web_impl.dart`** — 3-Sekunden-Safety-Net: falls `onReady` nach dem `bridge.init`-Aufruf nie feuert, wird der Editor zerstört und neu initialisiert. `didUpdateWidget` aktualisiert `_lastContent` nun immer, auch wenn `_editorReady` noch `false` ist.
+#### CKEditor — Init Race Condition
+- **`flutter_client/web/index.html`** (`_ckBridge.init`) — `document.getElementById('cke_editor_<id>')` is now retried up to 10× with a 200 ms gap if the DOM element isn't in the document yet on the first call. Additional retry (up to 3×, 500 ms) on `ClassicEditor.create()` rejection.
+- **`flutter_client/lib/widgets/ckeditor_field_web_impl.dart`** — 3-second safety net: if `onReady` never fires after the `bridge.init` call, the editor is destroyed and re-initialized. `didUpdateWidget` now always updates `_lastContent`, even if `_editorReady` is still `false`.
 
-#### Glossar-Tooltip — Stabilität (mouseover/mouseout)
-- **`flutter_client/web/index.html`** — `mouseover`- und `mouseout`-Handler nutzen jetzt `relatedTarget`, um zu prüfen ob die Maus den Highlight-Span wirklich verlässt. Interne Bewegungen innerhalb des Spans lösen kein Hide mehr aus. `clearTimeout` wird im `mouseover`-Handler nur noch aufgerufen wenn die Maus tatsächlich über einem Highlight-Element ist.
+#### Glossary Tooltip — Stability (mouseover/mouseout)
+- **`flutter_client/web/index.html`** — `mouseover` and `mouseout` handlers now use `relatedTarget` to check whether the mouse actually leaves the highlight span. Internal movement within the span no longer triggers a hide. `clearTimeout` in the `mouseover` handler is now only called when the mouse is actually over a highlight element.
 
 ---
 
