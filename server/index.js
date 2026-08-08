@@ -14,10 +14,16 @@ const { runMigrations }          = require('./db_migrate');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pb-hub-super-secret-key-2026';
 
-const upload = multer({ dest: 'uploads/' });
+// On Cloudron, only /app/data is writable (read-only filesystem elsewhere);
+// CLOUDRON_DATA_DIR is not an addon-provided var, we just default to it there.
+const DATA_DIR = process.env.CLOUDRON ? '/app/data' : path.join(__dirname, 'data');
+const UPLOADS_DIR = process.env.CLOUDRON ? path.join(DATA_DIR, 'uploads') : path.join(__dirname, 'uploads');
+fs.ensureDirSync(UPLOADS_DIR);
+
+const upload = multer({ dest: UPLOADS_DIR });
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, 'uploads/avatars');
+    const dir = path.join(UPLOADS_DIR, 'avatars');
     fs.ensureDirSync(dir);
     cb(null, dir);
   },
@@ -94,9 +100,6 @@ const db = mysql.createPool({
 
 const app = express();
 const PORT = process.env.PORT || 9901;
-// On Cloudron, only /app/data is writable (read-only filesystem elsewhere);
-// CLOUDRON_DATA_DIR is not an addon-provided var, we just default to it there.
-const DATA_DIR = process.env.CLOUDRON ? '/app/data' : path.join(__dirname, 'data');
 const METADATA_DIR = path.join(DATA_DIR, 'metadata');
 const TRANSLATIONS_DIR = path.join(DATA_DIR, 'translations');
 const LANGUAGES_FILE = path.join(__dirname, 'languages.json');
@@ -105,11 +108,10 @@ const STATUS_FILE = path.join(DATA_DIR, 'status.json');
 // Ensure directories exist
 fs.ensureDirSync(METADATA_DIR);
 fs.ensureDirSync(TRANSLATIONS_DIR);
-fs.ensureDirSync(path.join(__dirname, 'uploads'));
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // --- Unsplash Service ---
 registerUnsplashRoutes(app);
