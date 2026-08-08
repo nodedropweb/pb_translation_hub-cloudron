@@ -40,7 +40,26 @@ directory are redirected accordingly.
 
 ## 2. Installing the app
 
-### Option A — build from source (slower, no prerequisites beyond the Cloudron CLI)
+### Recommended: install the prebuilt image
+
+A prebuilt image is published to `ghcr.io/nodedropweb/pb_translation_hub-cloudron` after every
+release. **Use this path unless you have a specific reason to build from source** — it's the
+default we recommend for a production install:
+
+```bash
+cloudron login my.<your-domain>
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location <subdomain>
+```
+
+No build step, no Flutter SDK download on your Cloudron server — Cloudron just pulls and runs
+the image. Measured on a clean install: **~26 seconds**, versus 5–10 minutes building from
+source (the Flutter web release build alone takes several minutes). Same result either way —
+this is purely about install/update speed.
+
+### Alternative: build from source
+
+Only needed if you're developing the package itself, or `ghcr.io` is unreachable from your
+Cloudron server for some reason:
 
 ```bash
 git clone https://github.com/nodedropweb/pb_translation_hub-cloudron.git
@@ -49,18 +68,8 @@ cloudron login my.<your-domain>
 cloudron install --location <subdomain>
 ```
 
-The Flutter web build alone takes several minutes; the whole install typically takes 5–10
-minutes. Cloudron builds the image directly on your Cloudron server.
-
-### Option B — install a prebuilt image (recommended, seconds instead of minutes)
-
-If a prebuilt image has been published to `ghcr.io/nodedropweb/pb_translation_hub-cloudron`:
-
-```bash
-cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location <subdomain>
-```
-
-No build step, no Flutter SDK download — Cloudron just pulls and runs the image.
+Cloudron builds the image directly on your Cloudron server — no local Docker required, but
+noticeably slower and it ties up CPU on the server while building.
 
 ### DNS
 
@@ -176,16 +185,18 @@ migrations in `server/migrations/` are already MySQL-8-safe and run automaticall
 
 ## 5. Updating an installed app
 
+Recommended (matches the recommended install path):
+
+```bash
+cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+```
+
+If you built from source instead:
+
 ```bash
 cd pb_translation_hub-cloudron   # wherever you cloned it
 git pull
 cloudron update --app <subdomain>
-```
-
-Or, if using a prebuilt image:
-
-```bash
-cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 ```
 
 `cloudron update` always takes an automatic backup snapshot first and performs a rolling restart

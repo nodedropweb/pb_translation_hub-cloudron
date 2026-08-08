@@ -42,7 +42,27 @@ Upload-Verzeichnis des Node-Backends entsprechend umgeleitet werden.
 
 ## 2. Die App installieren
 
-### Option A — aus dem Quellcode bauen (langsamer, keine Voraussetzungen außer der Cloudron-CLI)
+### Empfohlen: das vorgebaute Image installieren
+
+Nach jedem Release wird ein vorgebautes Image unter `ghcr.io/nodedropweb/pb_translation_hub-cloudron`
+veröffentlicht. **Diesen Weg nutzen, sofern kein konkreter Grund für einen Build aus dem
+Quellcode besteht** — das ist unser empfohlener Standard für eine Produktivinstallation:
+
+```bash
+cloudron login my.<deine-domain>
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location <subdomain>
+```
+
+Kein Build-Schritt, kein Flutter-SDK-Download auf deinem Cloudron-Server — Cloudron zieht das
+Image nur noch und startet es. Gemessen bei einer frischen Installation: **~26 Sekunden**,
+gegenüber 5–10 Minuten beim Bauen aus dem Quellcode (allein der Flutter-Web-Release-Build
+dauert mehrere Minuten). Das Ergebnis ist in beiden Fällen identisch — es geht rein um die
+Install-/Update-Geschwindigkeit.
+
+### Alternative: aus dem Quellcode bauen
+
+Nur nötig, wenn du am Paket selbst entwickelst, oder `ghcr.io` von deinem Cloudron-Server aus
+aus irgendeinem Grund nicht erreichbar ist:
 
 ```bash
 git clone https://github.com/nodedropweb/pb_translation_hub-cloudron.git
@@ -51,19 +71,8 @@ cloudron login my.<deine-domain>
 cloudron install --location <subdomain>
 ```
 
-Allein der Flutter-Web-Build dauert mehrere Minuten; die gesamte Installation braucht meist
-5–10 Minuten. Cloudron baut das Image direkt auf deinem Cloudron-Server.
-
-### Option B — ein vorgebautes Image installieren (empfohlen, Sekunden statt Minuten)
-
-Falls ein vorgebautes Image unter `ghcr.io/nodedropweb/pb_translation_hub-cloudron`
-veröffentlicht wurde:
-
-```bash
-cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location <subdomain>
-```
-
-Kein Build-Schritt, kein Flutter-SDK-Download — Cloudron zieht das Image nur noch und startet es.
+Cloudron baut das Image direkt auf deinem Cloudron-Server — kein lokales Docker nötig, aber
+spürbar langsamer, und es bindet während des Baus CPU auf dem Server.
 
 ### DNS
 
@@ -186,16 +195,18 @@ automatisch beim ersten Start.
 
 ## 5. Eine installierte App aktualisieren
 
+Empfohlen (passend zum empfohlenen Install-Weg):
+
+```bash
+cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+```
+
+Falls stattdessen aus dem Quellcode gebaut wurde:
+
 ```bash
 cd pb_translation_hub-cloudron   # wo auch immer du geklont hast
 git pull
 cloudron update --app <subdomain>
-```
-
-Oder, bei Nutzung eines vorgebauten Images:
-
-```bash
-cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 ```
 
 `cloudron update` erstellt immer zuerst automatisch einen Backup-Snapshot und führt dann einen
