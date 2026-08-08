@@ -13,6 +13,70 @@ Cloudron-Paket-Variante.
 
 ---
 
+## Schnellstart: Neuinstallation mit dem GitHub-Image
+
+Konkretes Beispiel: Die App soll unter `pb.drupal.de` laufen, per vorgebautem Image von GHCR.
+
+**0. Einmalige Voraussetzungen**
+
+1. Auf dem **eigenen Rechner** (nicht auf dem Cloudron-Server) Node.js/npm und die Cloudron-CLI
+   installieren:
+   ```bash
+   npm install -g cloudron
+   ```
+2. CLI mit der Cloudron-Instanz verbinden (öffnet einen Login-Flow im Browser):
+   ```bash
+   cloudron login my.drupal.de
+   ```
+3. **Zugriff auf das GHCR-Image sicherstellen.** Das Package
+   `ghcr.io/nodedropweb/pb_translation_hub-cloudron` ist aktuell **nicht öffentlich sichtbar**
+   (geprüft: als anonymer Besucher zeigt die Packages-Seite des Accounts nichts an, obwohl das
+   Repo selbst öffentlich ist). Ohne einen der folgenden Schritte schlägt der Pull auf einem
+   fremden Cloudron-Server fehl:
+   - **Empfohlen:** Package auf GitHub auf „Public" stellen (Package-Seite →
+     „Package settings" → „Change visibility"). Der Quellcode im Repo ist ohnehin bereits
+     öffentlich, das Image enthält nichts zusätzlich Schützenswertes.
+   - **Alternativ:** Auf dem Cloudron-Server selbst `docker login ghcr.io` mit einem
+     GitHub-Personal-Access-Token ausführen, das Leserechte (`read:packages`) auf das Package hat.
+
+**1. DNS anlegen**
+
+A-Record `pb.drupal.de` → IP des Cloudron-Servers (und `my.drupal.de`, falls dies die erste App
+auf der Instanz ist). Vor dem nächsten Schritt propagieren lassen, sonst schlägt die
+Let's-Encrypt-Ausstellung fehl.
+
+**2. Installieren**
+
+```bash
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location pb
+```
+
+Läuft `drupal.de` nicht als Standarddomain der Cloudron-Instanz, sondern als eine von mehreren
+konfigurierten Domains, zusätzlich `--domain drupal.de` anhängen.
+
+Nach ca. 26 Sekunden ist die (leere) App unter `https://pb.drupal.de` erreichbar.
+
+**3. Weiter je nach Fall**
+
+- **Frische/leere Installation** → fertig. `https://pb.drupal.de` öffnen, ersten Account
+  registrieren, Sync von Drupal.org anstoßen.
+- **Bestehende Daten übernehmen** (z. B. Umzug vom bisherigen Docker-Compose-Deployment) → weiter
+  mit [Abschnitt 3](#3-nach-der-installation-bestehende-daten-importieren) unten (Datenbank-Dump
+  + `translations`/`metadata`/`uploads` importieren), danach
+  `cloudron restart --app pb.drupal.de`.
+
+**4. Später aktualisieren**
+
+```bash
+cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+```
+
+Alles Weitere unten (Datenimport im Detail, MariaDB/MySQL-Kompatibilität, bekannte
+Cloudron-Eigenheiten) ist Nachschlagewerk für die Details — für eine reine Neuinstallation ohne
+Datenübernahme reichen die vier Schritte oben.
+
+---
+
 ## 1. Architektur
 
 Cloudron-Apps laufen als **ein einzelner Container mit einem einzigen Port** — ein Docker-Compose-
