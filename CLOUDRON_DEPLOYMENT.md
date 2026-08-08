@@ -144,7 +144,16 @@ installing — the install step provisions a Let's Encrypt certificate via HTTP 
 
 A fresh install has an **empty** database and no translation files. If you're taking over an
 existing deployment (e.g. migrating off the docker-compose setup), import its data once, right
-after install:
+after install.
+
+**Where do I get the data export from?** There's no automated download for this — you get a
+ready-made archive (DB dump plus `metadata`/`translations`/`status.json`/`uploads`) from whoever
+currently operates the production deployment. Ask the current maintainer; they'll share a current
+export with you over a private channel (not linked publicly here). A dump taken straight from a
+running MariaDB deployment is usually **not** MySQL-8-compatible as-is — explicitly ask whether
+the export has already been adapted for MySQL 8 (see the
+[compatibility notes](#4-mariadb--mysql-8-compatibility-notes) below); if so, it saves you the
+manual fixes entirely.
 
 ### 3a. Database
 
@@ -296,3 +305,36 @@ These cost real debugging time and are worth knowing before you go digging yours
   (`drw-rw-rw-`), breaking `require()`'s directory traversal with a misleading "Cannot find
   module" error even though the file was physically present. Fixed with a blanket
   `chmod -R a+rX` after all `COPY` steps in the `Dockerfile`.
+
+---
+
+## 7. For maintainers: publishing a code change
+
+This section is for whoever maintains the package (not the Drupal e.V. admin running it) — how
+to get a code change from a local commit into the `ghcr.io` image that `cloudron update` pulls.
+
+**Prerequisites:** Docker installed wherever you build (your machine or any Linux host — it
+doesn't have to be the Cloudron server itself), and a GitHub personal access token with
+`write:packages` scope for `docker login ghcr.io`.
+
+```bash
+cd pb_translation_hub-cloudron
+git add -A && git commit -m "..." && git push origin master   # land the change first
+
+docker build -t ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest .
+
+docker login ghcr.io -u <your-github-username>   # only needed once per machine
+docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+```
+
+The Flutter web build step inside `docker build` takes several minutes — this is the same cost
+described in [Section 2](#2-installing-the-app) for a from-source install, just done once here
+instead of on every admin's Cloudron server.
+
+Once the push finishes, anyone running `cloudron update --app <subdomain> --image
+ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest` (see [Section 5](#5-updating-an-installed-app))
+picks up the new image — there's no separate "release" or version bump required for the `latest`
+tag to update. If you want installs to be pinned to a specific version instead of always tracking
+`latest`, push an additional tag (e.g. `docker push
+ghcr.io/nodedropweb/pb_translation_hub-cloudron:2.4.0`) and reference that tag in the update/
+install command instead.
