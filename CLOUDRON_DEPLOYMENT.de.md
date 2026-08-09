@@ -172,9 +172,7 @@ ohnehin überall `process.env.X` liest:
 ```bash
 cloudron env set --app <subdomain> \
   JWT_SECRET=<eigener-zufälliger-wert> \
-  UNSPLASH_APP_ID=<...> \
   UNSPLASH_ACCESS_KEY=<...> \
-  UNSPLASH_SECRET_KEY=<...> \
   HELP_VIDEO_DE=<youtube-link> \
   HELP_VIDEO_EN=<youtube-link> \
   PB_DEBUG_KEY=<eigener-wert>
@@ -183,7 +181,21 @@ cloudron env set --app <subdomain> \
 `cloudron env set` startet den Container automatisch neu; die Werte sind danach sofort aktiv
 (geprüft mit `cloudron exec --app <subdomain> -- printenv <NAME>`). Mit `cloudron env list --app
 <subdomain>` lassen sich die aktuell gesetzten Werte einsehen, mit `cloudron env unset` wieder
-entfernen.
+entfernen. Auch einzelne Werte lassen sich so jederzeit ändern (z. B. ein neuer Video-Link) —
+das ist ein reiner Konfigurationswechsel und braucht **kein** neues Image, keinen Rebuild, kein
+`cloudron update`.
+
+**Was macht welcher Wert?**
+
+| Variable | Zweck | Wenn nicht gesetzt |
+|---|---|---|
+| `JWT_SECRET` | Signiert die Login-Tokens **aller** Nutzer (Auth). Der Code prüft nur die Signatur, nicht nochmal die Rolle in der DB — wer den Wert kennt, kann sich ein Token mit `role: admin` selbst bauen. | Fällt auf einen im öffentlichen Quellcode sichtbaren Wert zurück — **unbedingt setzen**, bevor die App produktiv genutzt wird. |
+| `UNSPLASH_ACCESS_KEY` | Zufälliges Hintergrundbild fürs Theme (`/api/unsplash/random-bg`). | App fällt automatisch auf fest hinterlegte Bild-URLs zurück — rein kosmetisch, kein Fehler. |
+| `HELP_VIDEO_DE` / `HELP_VIDEO_EN` | YouTube-Tutorial-Video auf der Hilfeseite, je Sprache. | Video-Panel wird ausgeblendet, kein Fehler. |
+| `PB_DEBUG_KEY` | Schaltet zwei Debug-Endpunkte frei (Vorschau auf noch nicht freigegebene Übersetzungen, Sync-Inspektion) — für Mitwirkende, nicht für Endnutzer gedacht. | Beide Endpunkte antworten mit 403, sicher deaktiviert — optional. |
+
+`UNSPLASH_APP_ID` und `UNSPLASH_SECRET_KEY` (in `server/.env.example` gelistet) werden im Code
+aktuell **nicht** verwendet und müssen nicht gesetzt werden.
 
 > **Wichtig — `JWT_SECRET` wirklich setzen.** Der Code hat einen Fallback-Wert, falls
 > `JWT_SECRET` fehlt, und der steht wortwörtlich im öffentlichen Quellcode

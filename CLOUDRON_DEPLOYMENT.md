@@ -164,9 +164,7 @@ addon variables (`CLOUDRON_MYSQL_*`) and requires no code change, since the app 
 ```bash
 cloudron env set --app <subdomain> \
   JWT_SECRET=<your-own-random-value> \
-  UNSPLASH_APP_ID=<...> \
   UNSPLASH_ACCESS_KEY=<...> \
-  UNSPLASH_SECRET_KEY=<...> \
   HELP_VIDEO_DE=<youtube-link> \
   HELP_VIDEO_EN=<youtube-link> \
   PB_DEBUG_KEY=<your-own-value>
@@ -175,14 +173,22 @@ cloudron env set --app <subdomain> \
 `cloudron env set` restarts the container automatically; the values are active immediately
 afterward (verified with `cloudron exec --app <subdomain> -- printenv <NAME>`). Use `cloudron env
 list --app <subdomain>` to see what's currently set, and `cloudron env unset` to remove a value.
+Any single value can be changed the same way at any time (e.g. a new video link) — that's a plain
+config change and needs **no** new image, no rebuild, no `cloudron update`.
 
-> **Important — actually set `JWT_SECRET`.** The code has a fallback value for when `JWT_SECRET`
-> is missing, and that fallback is right there in the public source (`server/index.js`). Leave it
-> unchanged and anyone who reads the source can forge valid login tokens. **Set your own random
-> value before the app goes live.**
+**What does each value do?**
 
-For what each variable is and does, see `server/.env.example` in the repo. Get the actual values
-(Unsplash credentials, etc.) — same as the data export in
+| Variable | Purpose | If not set |
+|---|---|---|
+| `JWT_SECRET` | Signs the login tokens for **every** user (auth). The code only checks the signature, never re-checks the role against the database — anyone who knows the value can build themselves a token with `role: admin`. | Falls back to a value visible in the public source — **set this before the app goes live.** |
+| `UNSPLASH_ACCESS_KEY` | Random background image for the theme (`/api/unsplash/random-bg`). | App falls back to a fixed set of background image URLs — cosmetic only, no error. |
+| `HELP_VIDEO_DE` / `HELP_VIDEO_EN` | YouTube tutorial video on the help screen, per language. | Video panel is hidden, no error. |
+| `PB_DEBUG_KEY` | Unlocks two debug endpoints (preview of not-yet-approved translations, sync inspection) — meant for contributors, not end users. | Both endpoints return 403, safely disabled — optional. |
+
+`UNSPLASH_APP_ID` and `UNSPLASH_SECRET_KEY` (listed in `server/.env.example`) are currently
+**not** used anywhere in the code and don't need to be set.
+
+Get the actual values (Unsplash credentials, etc.) — same as the data export in
 [Section 3](#3-post-install-importing-existing-data) — from the current maintainer over a private
 channel.
 
