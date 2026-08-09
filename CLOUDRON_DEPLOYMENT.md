@@ -45,7 +45,18 @@ domains, add `--domain drupal.de`.
 
 After roughly 26 seconds, the (empty) app is reachable at `https://pb.drupal.de`.
 
-**3. Next step depends on the situation**
+**3. Set the app secrets**
+
+```bash
+cloudron env set --app pb.drupal.de JWT_SECRET=<your-own-random-value>
+```
+
+The app runs fine without a custom `JWT_SECRET`, but it then signs login tokens with a fallback
+value visible in the public source — set your own before going live. For Unsplash image search
+and help videos, see the full command in the
+[App secrets section below](#app-secrets-env-values).
+
+**4. Next step depends on the situation**
 
 - **Fresh/empty install** → done. Open `https://pb.drupal.de`, register the first account,
   trigger a sync from Drupal.org.
@@ -53,14 +64,14 @@ After roughly 26 seconds, the (empty) app is reachable at `https://pb.drupal.de`
   with [Section 3](#3-post-install-importing-existing-data) below (import the database dump plus
   `translations`/`metadata`/`uploads`), then run `cloudron restart --app pb.drupal.de`.
 
-**4. Updating later**
+**5. Updating later**
 
 ```bash
 cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 ```
 
 Everything below is reference material (data import in detail, MariaDB/MySQL compatibility,
-known Cloudron quirks) — for a plain fresh install with no data migration, the four steps above
+known Cloudron quirks) — for a plain fresh install with no data migration, the five steps above
 are all you need.
 
 ---
@@ -137,6 +148,43 @@ installing — the install step provisions a Let's Encrypt certificate via HTTP 
 > correct AAAA record for the subdomain, or disable IPv6 support in Cloudron's network settings
 > to skip the check. If the server has no IPv6 address at all, the check is skipped automatically
 > and a plain A record is enough.
+
+### App secrets (.env values)
+
+The docker-compose deployment reads secrets (Unsplash API keys, `JWT_SECRET`, …) from a local
+`server/.env` file — deliberately not part of the repo, and not baked into the built image
+either (especially now that the GHCR image is public). So a freshly installed Cloudron container
+has **none of these values set**, and nothing about that fails loudly — Unsplash image search,
+the help videos, and the debug endpoints just stay silently disabled.
+
+Cloudron has a purpose-built mechanism for this — `cloudron env` — which works exactly like the
+addon variables (`CLOUDRON_MYSQL_*`) and requires no code change, since the app already reads
+`process.env.X` everywhere:
+
+```bash
+cloudron env set --app <subdomain> \
+  JWT_SECRET=<your-own-random-value> \
+  UNSPLASH_APP_ID=<...> \
+  UNSPLASH_ACCESS_KEY=<...> \
+  UNSPLASH_SECRET_KEY=<...> \
+  HELP_VIDEO_DE=<youtube-link> \
+  HELP_VIDEO_EN=<youtube-link> \
+  PB_DEBUG_KEY=<your-own-value>
+```
+
+`cloudron env set` restarts the container automatically; the values are active immediately
+afterward (verified with `cloudron exec --app <subdomain> -- printenv <NAME>`). Use `cloudron env
+list --app <subdomain>` to see what's currently set, and `cloudron env unset` to remove a value.
+
+> **Important — actually set `JWT_SECRET`.** The code has a fallback value for when `JWT_SECRET`
+> is missing, and that fallback is right there in the public source (`server/index.js`). Leave it
+> unchanged and anyone who reads the source can forge valid login tokens. **Set your own random
+> value before the app goes live.**
+
+For what each variable is and does, see `server/.env.example` in the repo. Get the actual values
+(Unsplash credentials, etc.) — same as the data export in
+[Section 3](#3-post-install-importing-existing-data) — from the current maintainer over a private
+channel.
 
 ---
 
