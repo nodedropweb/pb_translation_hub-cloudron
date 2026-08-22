@@ -47,6 +47,7 @@ server/*.pid
 .env.test.local
 .env.production.local
 server/.env
+server/check_pass.js
 
 # Dev/Scratch Artifacts
 scratch/

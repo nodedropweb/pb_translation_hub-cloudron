@@ -11,7 +11,38 @@ Daten im Format `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-08-22
+
+### Security
+
+Eine vollständige Security-Coverage-Review deckte mehrere Befunde auf, die hier alle behoben wurden:
+
+- **Kritisch: Credential-Leak in der Git-Historie.** `server/check_pass.js` (ein bcrypt-Hash plus ein Klartext-Passwort-Kandidat) war in diesem öffentlichen Repo getrackt. Datei entfernt, zur `.gitignore` hinzugefügt und aus der Git-Historie entfernt (Force-Push-Rewrite — wer das Repo bereits geklont hat, muss neu klonen). **Das betroffene Passwort muss weiterhin manuell rotiert werden**, falls das nicht schon geschehen ist.
+- **Kritisch: Zip-Slip beim Backup-Upload.** `POST /api/upload-backup` erfordert jetzt `isAdmin` (vorher jeder eingeloggte Nutzer) und entpackt `.zip`-Archive über `adm-zip` mit einer Pfad-Containment-Prüfung statt eines ausgeführten `unzip`. Zusätzlich Upload-Größenlimit (100 MB) und Dateityp-Filter im `multer`-Handler.
+- **Kritisch: Offener Proxy über `/api/image-proxy`.** Der Server löst das Ziel jetzt per DNS auf und blockiert private/lokale/Link-Local-Adressen (inkl. Cloud-Metadaten-Bereich), bevor der Request ausgeführt wird.
+- **Hoch: SSRF in `/api/unsplash/track-download`.** `download_location` muss jetzt exakt auf `api.unsplash.com` zeigen.
+- **Hoch: Path Traversal in den Datei-Ausliefer-Routen.** Neue `safeTranslationPath()`-Absicherung in `routes/translations.js` validiert `langcode`/`filename` gegen eine Whitelist und stellt sicher, dass der aufgelöste Pfad innerhalb von `TRANSLATIONS_DIR` bleibt — angewendet auf `GET /translations/:langcode/:machine_name`, `GET /debug/:langcode/:filename` und `GET /:langcode/:filename`.
+- **Hoch: fehlende Authentifizierung bei `POST /api/categories/import-local`.** Erfordert jetzt `isAdmin`; `langcode` wird zusätzlich gegen eine Whitelist validiert, bevor es in einem Dateipfad verwendet wird.
+- **Hoch: hardcodierter JWT-Secret-Fallback.** `index.js` bricht beim Start jetzt hart ab, wenn `JWT_SECRET` nicht gesetzt ist, statt auf einen im Quellcode sichtbaren Default zurückzufallen.
+- **Hoch: kein Rate-Limiting bei Login/Registrierung.** `express-rate-limit` (15 Versuche/15 Min pro IP) für `POST /api/auth/login` und `/api/auth/register` ergänzt.
+- **Mittel: fehlende Authentifizierung bei `POST /api/sync/quick` und `/api/sync/project/:machine_name`.** Beide erfordern jetzt `authenticateToken`, konsistent mit den übrigen Sync-Routen.
+- **Mittel: fehlende Authentifizierung bei `POST /api/import-local`.** Erfordert jetzt `authenticateToken` + `isAdmin`.
+- **Mittel: fehlende Rollenprüfung bei `POST /api/categories/translate`.** Erfordert jetzt `isReviewerOrAdmin`, passend zu `glossary.js`.
+- **Mittel: unparametrisiertes Batch-Insert bei `POST /api/sync/priority`.** Manuelles String-Escaping durch `db.query('... VALUES ?', [batch])` mit Array-Platzhalter ersetzt.
+- **Mittel: hardcodierter DB-Passwort-Fallback (`'drupal'`)** aus `index.js` und 8 Wartungs-/Migrationsskripten entfernt; alle brechen jetzt hart ab, wenn das Datenbank-Passwort (`CLOUDRON_MYSQL_PASSWORD` bzw. `DB_PASSWORD`) nicht gesetzt ist.
+- **Mittel: Gemini/DeepL-API-Keys im Klartext gespeichert.** Neues `lib/secretCrypto.js` (AES-256-GCM, Schlüssel aus `ENCRYPTION_KEY` oder von `JWT_SECRET` abgeleitet) verschlüsselt `users.google_ai_key`/`deepl_api_key` beim Speichern; Lesevorgänge (Login, `/auth/me`, jeder AI-Aufruf in `routes/ai.js`) entschlüsseln transparent. Bestehende Klartext-Keys funktionieren unverändert weiter und werden beim nächsten Profil-Speichern automatisch verschlüsselt.
+- **Niedrig: CORS ohne Origin-Einschränkung.** Optionale Allowlist über `CORS_ALLOWED_ORIGINS` (kommagetrennt); ohne gesetzte Env-Var bleibt das Verhalten wie zuvor offen, sodass dies kein Deployment brechen kann, das die Variable noch nicht gesetzt hat.
+- **Niedrig: keine Security-Header.** `helmet` als globale Middleware ergänzt (CSP deaktiviert, da die Flutter-Web-SPA vom selben Origin hinter Cloudrons Reverse-Proxy ausgeliefert wird).
+- **Niedrig: Timing-Angriff beim Debug-Key-Vergleich.** `requireDebugKey` (in `routes/sync.js` und `routes/translations.js`) nutzt jetzt `crypto.timingSafeEqual()` statt `!==`.
+- **Abhängigkeiten:** `npm audit fix` behob 5 gemeldete Schwachstellen in `axios`, `body-parser`, `form-data`, `multer` und `qs` (0 verbleibend).
+
 ### Added
+
+#### App-UI-Lokalisierung (i18n)
+- Die eigene Oberfläche des Flutter-Clients (Buttons, Labels, Tooltips, Abschnittsüberschriften — nicht der übersetzte Projekt-*Inhalt*, der bereits mehrsprachig war) wird jetzt über Flutter-ARB-Dateien (`flutter_client/lib/l10n/`) lokalisiert, kompiliert mit `flutter gen-l10n` zu `AppLocalizations`.
+- Das aktive UI-Locale folgt demselben Zielsprachen-Dropdown, das bereits für Content genutzt wird, aufgelöst in `main.dart` über eine `_nativeUiLocales`-Map.
+- Native UI-Übersetzungen für **Deutsch** (Template), **Französisch**, **Japanisch**, **Russisch**, **Spanisch**, **Türkisch**, **brasilianisches Portugiesisch** und **vereinfachtes Chinesisch** — jede andere Zielsprache fällt auf Englisch zurück.
+- `help_screen.dart`, `crwb_study_screen.dart` und `widgets/consent_youtube_player.dart` sind bewusst ausgenommen — sie implementieren bereits ihr eigenes reicheres Mehrsprachen-Content-System, unabhängig von der App-Oberfläche.
 
 #### Analyse-Dashboard — Kompatibilität, Übersetzungsbedarf & Wochen-Verläufe
 - **`server/migrations/009_sync_events.sql`** — neue Tabelle `sync_events` (Verlauf von `new_module` / `description_changed` / `stale` mit `event_date`).

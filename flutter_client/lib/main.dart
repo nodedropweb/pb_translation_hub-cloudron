@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
+import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/token_storage.dart';
 import 'router.dart';
@@ -32,6 +35,20 @@ void main() async {
   );
 }
 
+// Maps our internal language codes (from languages.json, e.g. 'pt-br',
+// 'zh-hans') to the Flutter Locale their app_<code>.arb file was generated
+// for. Keep in sync with lib/l10n/app_*.arb.
+const _nativeUiLocales = <String, Locale>{
+  'de': Locale('de'),
+  'fr': Locale('fr'),
+  'ja': Locale('ja'),
+  'ru': Locale('ru'),
+  'es': Locale('es'),
+  'tr': Locale('tr'),
+  'pt-br': Locale('pt', 'BR'),
+  'zh-hans': Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+};
+
 class TranslationHubApp extends ConsumerWidget {
   const TranslationHubApp({super.key});
 
@@ -40,11 +57,31 @@ class TranslationHubApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final themeState = ref.watch(themeProvider);
 
+    // The app's own interface language follows the target language selected
+    // in the language dropdown — a translator working on French content sees
+    // a French interface, not just French content in a German UI. Only the
+    // locales below have a full native translation right now; every other
+    // target language falls back to English (the closest thing to a lingua
+    // franca for the module descriptions themselves) rather than staying
+    // German. Add an entry here once its app_<code>.arb file exists — the
+    // map key is our internal language code (from languages.json), the value
+    // is the actual Flutter Locale AppLocalizations was generated for.
+    final targetLangCode = ref.watch(languageProvider).targetLanguage.code;
+    final appLocale = _nativeUiLocales[targetLangCode] ?? const Locale('en');
+
     return MaterialApp.router(
-      title: 'PB Translation Hub',
+      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       theme: AppTheme.getTheme(themeState),
       debugShowCheckedModeBanner: false,
       routerConfig: router,
+      locale: appLocale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
     );
   }
 }

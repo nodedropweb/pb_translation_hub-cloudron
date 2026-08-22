@@ -381,6 +381,31 @@ ever **one** container and **one** port (`httpPort` in `CloudronManifest.json`) 
 
 ---
 
+## App UI Localization (i18n)
+
+The Flutter client's own **interface chrome** (buttons, labels, tooltips, section headers — not
+the translated project *content*) is localized via Flutter ARB files in `flutter_client/lib/l10n/`,
+compiled with `flutter gen-l10n` into `AppLocalizations`. The active UI locale follows the same
+target-language dropdown used for content (`languageProvider`), resolved in `main.dart` via the
+`_nativeUiLocales` map (internal `languages.json` code → Flutter `Locale`).
+
+**Native UI locales:** German (template), French, Japanese, Russian, Spanish, Turkish, Brazilian
+Portuguese (`pt-br` → `app_pt_BR.arb`), and Chinese Simplified (`zh-hans` → `app_zh_Hans.arb`).
+English is the fallback for every other target language. `app_pt.arb`/`app_zh.arb` also exist as
+required base-locale fallbacks — `flutter gen-l10n` refuses to build a `pt_BR`/`zh_Hans` file
+without a base `pt`/`zh` file present, even if unused directly.
+
+Deliberately **excluded**: `help_screen.dart`, `crwb_study_screen.dart`, and
+`widgets/consent_youtube_player.dart` — these already implement their own richer multi-language
+*content* system (DE/EN/FR/PT/JA/ZH via an internal `_t(lang, de, en, [ja])` helper) for genuine
+help/educational text, not app chrome.
+
+To add a native UI for a new language: create `lib/l10n/app_<code>.arb` (copy `app_en.arb`'s keys
+as a base, name the file per Flutter's locale-file convention), translate the values, and add an
+entry to the `_nativeUiLocales` map in `main.dart`.
+
+---
+
 ## Guardrails
 
 - All DB queries must use the `db` connection pool (prepared statements via `mysql2`).

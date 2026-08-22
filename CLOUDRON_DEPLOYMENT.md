@@ -37,8 +37,13 @@ the [DNS section below](#dns) for details.
 **2. Install**
 
 ```bash
-cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location pb
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 --location pb
 ```
+
+`:latest` also works for a fresh install, but **always pin a specific version tag** (matching the
+`version` field in `CloudronManifest.json` at the time you install) rather than relying on
+`:latest` — see the note in [Section 5](#5-updating-an-installed-app) about why `:latest` doesn't
+reliably drive `cloudron update`.
 
 If `drupal.de` isn't the Cloudron instance's default domain but one of several configured
 domains, add `--domain drupal.de`.
@@ -67,8 +72,11 @@ and help videos, see the full command in the
 **5. Updating later**
 
 ```bash
-cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:<new-version>
 ```
+
+Use the **new** version's tag (e.g. `0.3.0`), not `:latest` — see the note in
+[Section 5](#5-updating-an-installed-app) below.
 
 Everything below is reference material (data import in detail, MariaDB/MySQL compatibility,
 known Cloudron quirks) — for a plain fresh install with no data migration, the five steps above
@@ -112,13 +120,18 @@ default we recommend for a production install:
 
 ```bash
 cloudron login my.<your-domain>
-cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest --location <subdomain>
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 --location <subdomain>
 ```
 
 No build step, no Flutter SDK download on your Cloudron server — Cloudron just pulls and runs
 the image. Measured on a clean install: **~26 seconds**, versus 5–10 minutes building from
 source (the Flutter web release build alone takes several minutes). Same result either way —
 this is purely about install/update speed.
+
+Pin a real version tag rather than `:latest` — `:latest` is fine for a one-off fresh install, but
+`cloudron update` needs the tag string to actually change between runs to know there's something
+new to pull (see [Section 5](#5-updating-an-installed-app)), so starting from a version tag keeps
+install and update commands consistent.
 
 ### Alternative: build from source
 
@@ -309,10 +322,17 @@ migrations in `server/migrations/` are already MySQL-8-safe and run automaticall
 
 ## 5. Updating an installed app
 
-Recommended (matches the recommended install path):
+**Always specify the new version's tag, never `:latest`.** `cloudron update` decides whether
+there's anything to do by comparing the image reference you pass against what's currently
+installed — if you pass `:latest` both times, the tag string hasn't changed as far as Cloudron
+is concerned, and the update can silently no-op even though a newer image was pushed under that
+same tag. `:latest` only reliably works for the *first* install of an app, not for updating one
+that's already running. Always pull the target version from
+[the changelog](CHANGELOG.md)/[releases](https://github.com/nodedropweb/pb_translation_hub-cloudron/releases)
+or the `version` field in `CloudronManifest.json` at the commit you're updating to.
 
 ```bash
-cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0
 ```
 
 If you built from source instead:
@@ -371,13 +391,25 @@ to get a code change from a local commit into the `ghcr.io` image that `cloudron
 doesn't have to be the Cloudron server itself), and a GitHub personal access token with
 `write:packages` scope for `docker login ghcr.io`.
 
+**First, bump the version** — `CloudronManifest.json`'s `version` field, following semver (patch
+for fixes, minor for features, matching what you'd write in `CHANGELOG.md`). This version number
+*is* the image tag you'll push below; it's how `cloudron update` recognizes there's something new
+(see the note in [Section 5](#5-updating-an-installed-app) — `:latest` does **not** reliably
+trigger an update on an already-installed app, only on a fresh install).
+
 ```bash
 cd pb_translation_hub-cloudron
+# bump "version" in CloudronManifest.json, e.g. 0.1.0 → 0.2.0; add a CHANGELOG.md entry
 git add -A && git commit -m "..." && git push origin master   # land the change first
 
-docker build -t ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest .
+docker build -t ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 .
 
 docker login ghcr.io -u <your-github-username>   # only needed once per machine
+docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0
+
+# Optional: also move the floating `latest` tag, purely for the convenience of a *fresh* install
+# command that doesn't need to specify a version. Never rely on this alone for updates.
+docker tag ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 ```
 
@@ -386,9 +418,5 @@ described in [Section 2](#2-installing-the-app) for a from-source install, just 
 instead of on every admin's Cloudron server.
 
 Once the push finishes, anyone running `cloudron update --app <subdomain> --image
-ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest` (see [Section 5](#5-updating-an-installed-app))
-picks up the new image — there's no separate "release" or version bump required for the `latest`
-tag to update. If you want installs to be pinned to a specific version instead of always tracking
-`latest`, push an additional tag (e.g. `docker push
-ghcr.io/nodedropweb/pb_translation_hub-cloudron:2.4.0`) and reference that tag in the update/
-install command instead.
+ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0` (see [Section 5](#5-updating-an-installed-app))
+picks up the new image, using the **exact version tag you just pushed** — not `:latest`.

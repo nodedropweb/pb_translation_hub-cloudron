@@ -382,6 +382,33 @@ immer nur **einen** Container und **einen** Port (`httpPort` in `CloudronManifes
 
 ---
 
+## App-UI-Lokalisierung (i18n)
+
+Die eigene **Oberfläche** des Flutter-Clients (Buttons, Labels, Tooltips, Abschnittsüberschriften
+— nicht der übersetzte Projekt-*Inhalt*) wird über Flutter-ARB-Dateien in
+`flutter_client/lib/l10n/` lokalisiert, kompiliert mit `flutter gen-l10n` zu `AppLocalizations`.
+Das aktive UI-Locale folgt demselben Zielsprachen-Dropdown wie der Content (`languageProvider`),
+aufgelöst in `main.dart` über die `_nativeUiLocales`-Map (interner `languages.json`-Code →
+Flutter-`Locale`).
+
+**Native UI-Sprachen:** Deutsch (Template), Französisch, Japanisch, Russisch, Spanisch,
+Türkisch, brasilianisches Portugiesisch (`pt-br` → `app_pt_BR.arb`) und vereinfachtes Chinesisch
+(`zh-hans` → `app_zh_Hans.arb`). Englisch ist der Fallback für jede andere Zielsprache.
+`app_pt.arb`/`app_zh.arb` existieren zusätzlich als benötigte Basis-Locale-Fallbacks —
+`flutter gen-l10n` verweigert den Build einer `pt_BR`/`zh_Hans`-Datei ohne vorhandene
+Basis-Datei `pt`/`zh`, selbst wenn diese nicht direkt genutzt wird.
+
+Bewusst **ausgeschlossen**: `help_screen.dart`, `crwb_study_screen.dart` und
+`widgets/consent_youtube_player.dart` — diese implementieren bereits ihr eigenes, reicheres
+Mehrsprachensystem (DE/EN/FR/PT/JA/ZH über einen internen `_t(lang, de, en, [ja])`-Helper) für
+echten Hilfe-/Lern-*Content*, keine App-Oberfläche.
+
+Um eine native UI für eine neue Sprache zu ergänzen: `lib/l10n/app_<code>.arb` anlegen (Keys von
+`app_en.arb` als Basis kopieren, Dateiname nach Flutters Locale-Datei-Konvention benennen), Werte
+übersetzen, und einen Eintrag zur `_nativeUiLocales`-Map in `main.dart` hinzufügen.
+
+---
+
 ## Guardrails
 
 - Alle DB-Queries müssen den `db`-Connection-Pool nutzen (Prepared Statements via `mysql2`).
