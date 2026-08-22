@@ -41,7 +41,7 @@ Eine vollständige Security-Coverage-Review deckte mehrere Befunde auf, die hier
 #### App-UI-Lokalisierung (i18n)
 - Die eigene Oberfläche des Flutter-Clients (Buttons, Labels, Tooltips, Abschnittsüberschriften — nicht der übersetzte Projekt-*Inhalt*, der bereits mehrsprachig war) wird jetzt über Flutter-ARB-Dateien (`flutter_client/lib/l10n/`) lokalisiert, kompiliert mit `flutter gen-l10n` zu `AppLocalizations`.
 - Das aktive UI-Locale folgt demselben Zielsprachen-Dropdown, das bereits für Content genutzt wird, aufgelöst in `main.dart` über eine `_nativeUiLocales`-Map.
-- Native UI-Übersetzungen für **Deutsch** (Template), **Französisch**, **Japanisch**, **Russisch**, **Spanisch**, **Türkisch**, **brasilianisches Portugiesisch** und **vereinfachtes Chinesisch** — jede andere Zielsprache fällt auf Englisch zurück.
+- Native UI-Übersetzungen für **25 Sprachen**, priorisiert nach Drupal.orgs Rangliste der aktivsten Übersetzungsteams: Deutsch (Template), Französisch, Japanisch, Russisch, Spanisch, Türkisch, brasilianisches Portugiesisch, europäisches Portugiesisch, vereinfachtes Chinesisch, Ukrainisch, Niederländisch, Norwegisch Bokmål, Ungarisch, Katalanisch, Italienisch, Schwedisch, Dänisch, Polnisch, Rumänisch, Litauisch, Estnisch, Aserbaidschanisch, Indonesisch, Arabisch und Koreanisch — jede andere Zielsprache fällt auf Englisch zurück.
 - `help_screen.dart`, `crwb_study_screen.dart` und `widgets/consent_youtube_player.dart` sind bewusst ausgenommen — sie implementieren bereits ihr eigenes reicheres Mehrsprachen-Content-System, unabhängig von der App-Oberfläche.
 
 #### Analyse-Dashboard — Kompatibilität, Übersetzungsbedarf & Wochen-Verläufe

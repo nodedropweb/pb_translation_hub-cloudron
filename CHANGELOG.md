@@ -41,7 +41,7 @@ A full security-coverage review surfaced several findings, all fixed here:
 #### App UI Localization (i18n)
 - The Flutter client's own interface chrome (buttons, labels, tooltips, section headers — not the translated project *content*, which was already multilingual) is now localized via Flutter ARB files (`flutter_client/lib/l10n/`), compiled with `flutter gen-l10n` into `AppLocalizations`.
 - The active UI locale follows the same target-language dropdown already used for content, resolved in `main.dart` via a `_nativeUiLocales` map.
-- Native UI translations shipped for **German** (template), **French**, **Japanese**, **Russian**, **Spanish**, **Turkish**, **Brazilian Portuguese**, and **Chinese (Simplified)** — every other target language falls back to English.
+- Native UI translations shipped for **25 languages**, prioritized by Drupal.org's most-active-translation-teams ranking: German (template), French, Japanese, Russian, Spanish, Turkish, Brazilian Portuguese, European Portuguese, Chinese (Simplified), Ukrainian, Dutch, Norwegian Bokmål, Hungarian, Catalan, Italian, Swedish, Danish, Polish, Romanian, Lithuanian, Estonian, Azerbaijani, Indonesian, Arabic, and Korean — every other target language falls back to English.
 - `help_screen.dart`, `crwb_study_screen.dart`, and `widgets/consent_youtube_player.dart` are intentionally excluded — they already implement their own richer multi-language *content* system, unrelated to app chrome.
 
 #### Analytics Dashboard — Compatibility, Translation Needs & Weekly Trends

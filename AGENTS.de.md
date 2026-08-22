@@ -391,12 +391,17 @@ Das aktive UI-Locale folgt demselben Zielsprachen-Dropdown wie der Content (`lan
 aufgelöst in `main.dart` über die `_nativeUiLocales`-Map (interner `languages.json`-Code →
 Flutter-`Locale`).
 
-**Native UI-Sprachen:** Deutsch (Template), Französisch, Japanisch, Russisch, Spanisch,
-Türkisch, brasilianisches Portugiesisch (`pt-br` → `app_pt_BR.arb`) und vereinfachtes Chinesisch
-(`zh-hans` → `app_zh_Hans.arb`). Englisch ist der Fallback für jede andere Zielsprache.
-`app_pt.arb`/`app_zh.arb` existieren zusätzlich als benötigte Basis-Locale-Fallbacks —
-`flutter gen-l10n` verweigert den Build einer `pt_BR`/`zh_Hans`-Datei ohne vorhandene
-Basis-Datei `pt`/`zh`, selbst wenn diese nicht direkt genutzt wird.
+**Native UI-Sprachen (25 insgesamt):** Deutsch (Template), Französisch, Japanisch, Russisch,
+Spanisch, Türkisch, brasilianisches Portugiesisch (`pt-br` → `app_pt_BR.arb`), europäisches
+Portugiesisch (`pt-pt` → `app_pt.arb` — eine echte eigenständige Übersetzung, keine Kopie des
+brasilianischen Contents), vereinfachtes Chinesisch (`zh-hans` → `app_zh_Hans.arb`), Ukrainisch,
+Niederländisch, Norwegisch Bokmål, Ungarisch, Katalanisch, Italienisch, Schwedisch, Dänisch,
+Polnisch, Rumänisch, Litauisch, Estnisch, Aserbaidschanisch, Indonesisch, Arabisch und Koreanisch
+— priorisiert nach Drupal.orgs Rangliste der aktivsten Übersetzungsteams. Englisch ist der
+Fallback für jede andere Zielsprache. `app_pt.arb`/`app_zh.arb` dienen doppelt: als benötigter
+Basis-Locale-Fallback für ihre Country-/Script-qualifizierten Geschwister (`flutter gen-l10n`
+verweigert den Build einer `pt_BR`/`zh_Hans`-Datei ohne vorhandene Basis-Datei `pt`/`zh`) *und*,
+für `pt`, als die tatsächliche europäische Portugiesisch-Übersetzung.
 
 Bewusst **ausgeschlossen**: `help_screen.dart`, `crwb_study_screen.dart` und
 `widgets/consent_youtube_player.dart` — diese implementieren bereits ihr eigenes, reicheres

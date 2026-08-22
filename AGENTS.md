@@ -389,11 +389,16 @@ compiled with `flutter gen-l10n` into `AppLocalizations`. The active UI locale f
 target-language dropdown used for content (`languageProvider`), resolved in `main.dart` via the
 `_nativeUiLocales` map (internal `languages.json` code → Flutter `Locale`).
 
-**Native UI locales:** German (template), French, Japanese, Russian, Spanish, Turkish, Brazilian
-Portuguese (`pt-br` → `app_pt_BR.arb`), and Chinese Simplified (`zh-hans` → `app_zh_Hans.arb`).
-English is the fallback for every other target language. `app_pt.arb`/`app_zh.arb` also exist as
-required base-locale fallbacks — `flutter gen-l10n` refuses to build a `pt_BR`/`zh_Hans` file
-without a base `pt`/`zh` file present, even if unused directly.
+**Native UI locales (25 total):** German (template), French, Japanese, Russian, Spanish, Turkish,
+Brazilian Portuguese (`pt-br` → `app_pt_BR.arb`), European Portuguese (`pt-pt` → `app_pt.arb` —
+a genuinely distinct translation, not a copy of Brazilian), Chinese Simplified
+(`zh-hans` → `app_zh_Hans.arb`), Ukrainian, Dutch, Norwegian Bokmål, Hungarian, Catalan, Italian,
+Swedish, Danish, Polish, Romanian, Lithuanian, Estonian, Azerbaijani, Indonesian, Arabic, and
+Korean — prioritized by Drupal.org's most-active-translation-teams ranking. English is the
+fallback for every other target language. `app_pt.arb`/`app_zh.arb` do double duty as both the
+required base-locale fallback for their country/script-qualified siblings (`flutter gen-l10n`
+refuses to build a `pt_BR`/`zh_Hans` file without a base `pt`/`zh` file present) *and*, for `pt`,
+the actual European Portuguese translation.
 
 Deliberately **excluded**: `help_screen.dart`, `crwb_study_screen.dart`, and
 `widgets/consent_youtube_player.dart` — these already implement their own richer multi-language
