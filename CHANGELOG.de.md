@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.17] — 2026-08-23
+
+### Behoben
+
+- **Positionelle `INSERT`s (ohne explizite Spaltenliste) konnten Daten still beschädigen statt fehlzuschlagen — live entdeckt, bevor es ein echtes Deployment erreichte.** Beim Wiederherstellen aus einer von `mariadb-dump` erzeugten Datei (`export_for_cloudron.sh`, keine Spaltenliste bei den gedumpten Tabellen — nur der eigene `projects`-Insert dieser App benennt Spalten explizit) kam `Out of range value for column 'is_reviewed'`. Ursache: Die `translations`-Tabelle auf drupaltutorials.de ordnet Spalten `...,screenshot_alts,tags,source_hash,updated_at,is_reviewed`; das migrierte Schema dieser App ordnet sie `...,screenshot_alts,source_hash,is_reviewed,reviewed_by,updated_at`. Beide haben zufällig genau 10 Spalten, ein positioneller Insert scheitert also nicht mal an der Spaltenanzahl — er verschiebt still jeden Wert ab `screenshot_alts` in die falsche Spalte, bis irgendwann ein Typfehler auftritt, oder schlimmer: gar nicht auftritt und einfach falsche Daten dauerhaft speichert. `importSqlDump()` lehnt jetzt jedes `INSERT` ohne explizite Spaltenliste ab — schlägt laut und sofort fehl, statt darauf zu vertrauen, dass die Spaltenreihenfolge zwischen zwei unabhängig gewachsenen Schemas zufällig übereinstimmt.
+
 ## [0.4.16] — 2026-08-23
 
 ### Behoben

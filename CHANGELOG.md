@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.17] — 2026-08-23
+
+### Fixed
+
+- **Positional `INSERT`s (no explicit column list) could silently corrupt data instead of failing — confirmed live, caught before it reached a real deployment.** Recovering from a `mariadb-dump`-produced file (`export_for_cloudron.sh`, no column list on its dumped tables — only this app's own `projects` insert names columns explicitly) hit `Out of range value for column 'is_reviewed'`. Root cause: drupaltutorials.de's `translations` table orders columns `...,screenshot_alts,tags,source_hash,updated_at,is_reviewed`; this app's migrated schema orders them `...,screenshot_alts,source_hash,is_reviewed,reviewed_by,updated_at`. Both happen to have exactly 10 columns, so a positional insert doesn't even fail on column count — it silently shifts every value from `screenshot_alts` onward into the wrong column until something finally throws a type error, or worse, doesn't throw at all and just stores wrong data forever. `importSqlDump()` now refuses any `INSERT` that omits an explicit column list, failing loudly and immediately instead of trusting column order to match by coincidence between two independently-evolved schemas.
+
 ## [0.4.16] — 2026-08-23
 
 ### Fixed

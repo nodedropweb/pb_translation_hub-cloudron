@@ -766,6 +766,29 @@ async function importSqlDump(sqlGzPath) {
       // versions/flags produce different sets), whitelist the one statement
       // shape actually needed instead.
       if (!/^INSERT INTO /i.test(line)) continue;
+      // Require an explicit column list — INSERT INTO `t` (`a`,`b`,...)
+      // VALUES (...), never the positional INSERT INTO `t` VALUES (...)
+      // form. Both of this app's own producers (this file's
+      // seedFromBundledDataIfRequested()/admin.js's export-seed) always name
+      // columns explicitly, but a real mariadb-dump-produced recovery file
+      // doesn't by default, and positional inserts silently misalign data if
+      // the source and target schemas' column order ever diverges — which
+      // it does here: confirmed live, drupaltutorials.de's `translations`
+      // orders columns ...,screenshot_alts,tags,source_hash,updated_at,
+      // is_reviewed while this app's migrated schema orders them
+      // ...,screenshot_alts,source_hash,is_reviewed,reviewed_by,updated_at.
+      // Both have 10 columns, so a positional insert doesn't even fail on
+      // column count — it just quietly shifts every value from
+      // screenshot_alts onward into the wrong column until something
+      // finally throws a type error (is_reviewed receiving a 32-character
+      // hash, in this case) or, worse, doesn't throw at all and just stores
+      // wrong data. Failing loudly here on the missing column list is far
+      // safer than trusting column order to match by coincidence.
+      if (!/^INSERT INTO `[^`]+`\s*\(/i.test(line)) {
+        throw new Error(
+          `Refusing to import a positional INSERT with no explicit column list (silently misaligns data if the source and target schemas' column order differs): ${line.slice(0, 120)}...`
+        );
+      }
       // Each line is already exactly one complete statement (see the
       // producers named above), terminated by ';' — kept as-is here, since
       // multipleStatements needs that terminator between batched statements.
