@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.12] — 2026-08-23
+
+### Behoben
+
+- **Der Sanitize-Schritt nach dem Entpacken in `/upload-backup` konnte das komplette Datenverzeichnis dauerhaft lahmlegen und hätte nebenbei alle Nutzer-Avatare gelöscht.** Live bestätigt, direkt nach einem erfolgreichen großen Import: Jeder weitere Schreibzugriff unter `/app/data` — einschließlich der temporären Datei eines brandneuen Uploads — schlug mit `EACCES: permission denied` fehl. Ursache: Der Sanitize-Schritt führte `find "${destRoot}" -not -name "*.json" -delete && chmod -R 644 "${destRoot}" && find "${destRoot}" -type d -exec chmod 755 {} +` aus, wobei `destRoot` auf `DATA_DIR` **selbst** gesetzt war, nicht auf den entpackten Archivinhalt. Zwei getrennte Bugs in dieser einen Zeile: (1) Sie löscht jede Nicht-JSON-Datei irgendwo unter `DATA_DIR` — das hätte Nutzer-Avatare in `uploads/avatars/` mit erfasst, die nichts mit dem hochgeladenen Archiv zu tun haben; (2) `chmod -R 644` nimmt `DATA_DIR` sein eigenes Execute-Bit, und der nachfolgende `chmod 755`, der es wiederherstellen sollte, kann dann selbst nicht mehr ins Verzeichnis navigieren, um zu laufen — sperrt jeden Dateizugriff darunter dauerhaft aus, bis von Hand behoben (`chmod 755 /app/data`). Der komplette Shell-basierte Sanitize-Schritt wurde durch reine `fs`-Aufrufe ersetzt, strikt beschränkt auf die Pfade, die das Archiv tatsächlich entpackt hat (bereits für die Zip-Slip-Prüfung erfasst) — keine Shell, keine Verzeichnisse werden je angefasst, nichts außerhalb des eigenen Inhalts dieser Anfrage ist gefährdet.
+
 ## [0.4.11] — 2026-08-23
 
 ### Hinzugefügt

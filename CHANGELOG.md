@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.12] — 2026-08-23
+
+### Fixed
+
+- **`/upload-backup`'s post-extraction sanitize step could permanently break the whole data directory, and would have deleted user avatars.** Confirmed live, right after a successful large import: every subsequent write under `/app/data` — including a brand-new upload's own temp file — started failing with `EACCES: permission denied`. Root cause: the sanitize step ran `find "${destRoot}" -not -name "*.json" -delete && chmod -R 644 "${destRoot}" && find "${destRoot}" -type d -exec chmod 755 {} +` with `destRoot` set to `DATA_DIR` *itself*, not the archive's extracted content. Two separate bugs in that one line: (1) it deletes every non-JSON file anywhere under `DATA_DIR`, which would include user avatars in `uploads/avatars/` — nothing to do with the uploaded archive; (2) `chmod -R 644` strips `DATA_DIR`'s own execute bit, and the follow-up `chmod 755` meant to restore it can no longer traverse into the directory to run — permanently locking out every file operation under it until fixed by hand (`chmod 755 /app/data`). Replaced the whole shell-based sanitize with plain `fs` calls scoped strictly to the paths the archive actually extracted (already tracked for the zip-slip check) — no shell, no directories ever touched, nothing outside this request's own content at risk.
+
 ## [0.4.11] — 2026-08-23
 
 ### Added

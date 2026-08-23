@@ -392,16 +392,19 @@ module.exports = (ctx) => {
     const originalName = req.file.originalname;
     const extension = path.extname(originalName).toLowerCase();
     const destRoot = path.resolve(DATA_DIR);
+    let extractedPaths = null; // zip only — see the sanitize step below
 
     try {
       if (extension === '.zip') {
         const zip = new AdmZip(filePath);
+        extractedPaths = [];
         for (const entry of zip.getEntries()) {
           const target = path.resolve(destRoot, entry.entryName);
           if (target !== destRoot && !target.startsWith(destRoot + path.sep)) {
             await fs.remove(filePath);
             return res.status(400).json({ error: 'Archive contains an entry outside the target directory.' });
           }
+          if (!entry.isDirectory) extractedPaths.push(target);
         }
         zip.extractAllTo(destRoot, true);
       } else if (extension === '.gz' || extension === '.tgz') {
@@ -438,17 +441,28 @@ module.exports = (ctx) => {
         }
       }
 
-      // Sanitize extracted content: only .json files are expected, fixed
-      // permissions. DATA_DIR itself is a server-side constant (not user
-      // input), so this remains injection-safe even though it still shells out.
-      const { exec } = require('child_process');
-      const sanitationCmd = `find "${destRoot}" -type f -not -name "*.json" -delete && chmod -R 644 "${destRoot}" && find "${destRoot}" -type d -exec chmod 755 {} +`;
-      await new Promise((resolve) => {
-        exec(sanitationCmd, (sanError) => {
-          if (sanError) console.error('Sanitation error:', sanError);
-          resolve();
-        });
-      });
+      // Sanitize extracted content: only .json files are expected. Scoped
+      // strictly to the paths this archive actually extracted (tracked
+      // above, before extraction) — not the whole DATA_DIR. An earlier
+      // version ran `find "${destRoot}" -not -name "*.json" -delete` across
+      // all of DATA_DIR, which would have deleted every non-JSON file
+      // anywhere under it, including user avatars in uploads/avatars/ that
+      // have nothing to do with this archive. It also ran `chmod -R 644
+      // "${destRoot}"` on DATA_DIR *itself*, stripping its own execute bit —
+      // confirmed live: the follow-up `chmod 755` meant to restore it then
+      // couldn't even traverse into DATA_DIR to run, permanently breaking
+      // every file operation under it (multer's own uploads started failing
+      // with EACCES) until fixed by hand. Plain fs calls on the known
+      // extracted paths avoid both problems entirely — no shell, no
+      // recursion outside what this request actually wrote, and directories
+      // are never touched, so there's nothing here that can self-lock.
+      if (extractedPaths) {
+        for (const p of extractedPaths) {
+          if (!p.toLowerCase().endsWith('.json')) {
+            await fs.remove(p).catch((e) => console.error('Sanitize: could not remove', p, e.message));
+          }
+        }
+      }
 
       // A successful SQL import updated `translations`, but the public
       // GET /:langcode/:filename route below (what pb_localizer's
