@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.14] — 2026-08-23
+
+### Behoben
+
+- **Ein echtes Content-Backup wurde rundweg mit nacktem `413 Request Entity Too Large` abgelehnt.** `nginx/app.conf`s `client_max_body_size` stand auf `50M`, unter multers eigenem `100M`-`fileSize`-Limit in `server/index.js` — nginx sitzt vor multer, lehnte also einen echten ~60-MB-Export (DB-Dump + Kategorie-Übersetzungen, aus einem Live-Datensatz von 41k+ Projekten) ab, bevor multers eigene, spezifischere Fehlerbehandlung überhaupt zum Zug kam. Auf `100M` angehoben, passend zu multer.
+
 ## [0.4.13] — 2026-08-23
 
 ### Behoben
