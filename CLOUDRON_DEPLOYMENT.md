@@ -50,7 +50,23 @@ domains, add `--domain drupal.de`.
 
 After roughly 26 seconds, the (empty) app is reachable at `https://pb.drupal.de`.
 
-**3. Set the app secrets (optional)**
+**3. Create the first admin account**
+
+There's no in-app path to this on a fresh install: the registration form only creates
+translator/reviewer accounts, and every new account starts `is_active=0`, pending approval by an
+admin — who doesn't exist yet on a brand-new instance. Set `ADMIN_USERNAME`/`ADMIN_PASSWORD` (and
+optionally `ADMIN_EMAIL`) before the first boot, or right after — the app checks for an admin
+account on every startup and creates one from these if none exists yet:
+
+```bash
+cloudron env set --app pb.drupal.de ADMIN_USERNAME=<username> ADMIN_PASSWORD=<password>
+```
+
+This only ever fires once — as soon as an admin account exists, the env vars are ignored on every
+subsequent boot, so leaving them set is safe and won't reset anyone's password. Log in and change
+the password from the app afterward if you'd rather not leave it in Cloudron's env config.
+
+**4. Set the remaining app secrets (optional)**
 
 The app self-generates a random `JWT_SECRET` on first boot and persists it under its data
 directory if you don't configure one — no manual step required for a working install. Set your
@@ -64,15 +80,15 @@ cloudron env set --app pb.drupal.de JWT_SECRET=<your-own-random-value>
 For Unsplash image search and help videos, see the full command in the
 [App secrets section below](#app-secrets-env-values).
 
-**4. Next step depends on the situation**
+**5. Next step depends on the situation**
 
-- **Fresh/empty install** → done. Open `https://pb.drupal.de`, register the first account,
-  trigger a sync from Drupal.org.
+- **Fresh/empty install** → done. Open `https://pb.drupal.de`, log in with the admin account from
+  step 3, trigger a sync from Drupal.org.
 - **Migrating existing data** (e.g. moving off the previous docker-compose deployment) → continue
   with [Section 3](#3-post-install-importing-existing-data) below (import the database dump plus
   `translations`/`metadata`/`uploads`), then run `cloudron restart --app pb.drupal.de`.
 
-**5. Updating later**
+**6. Updating later**
 
 ```bash
 cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:<new-version>
@@ -179,6 +195,8 @@ addon variables (`CLOUDRON_MYSQL_*`) and requires no code change, since the app 
 
 ```bash
 cloudron env set --app <subdomain> \
+  ADMIN_USERNAME=<username> \
+  ADMIN_PASSWORD=<password> \
   JWT_SECRET=<your-own-random-value> \
   UNSPLASH_ACCESS_KEY=<...> \
   HELP_VIDEO_DE=<youtube-link> \
@@ -196,6 +214,8 @@ config change and needs **no** new image, no rebuild, no `cloudron update`.
 
 | Variable | Purpose | If not set |
 |---|---|---|
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Bootstraps the first admin account on startup if no admin exists yet — there's no in-app path to create one (registration only creates translator/reviewer accounts, and they start pending approval by an admin who doesn't exist on a fresh install). Only acts once; ignored on every subsequent boot once an admin exists, so it's safe to leave set. | No admin account gets created — you're locked out of the app with no recovery path short of inserting a row directly in the DB. |
+| `ADMIN_EMAIL` | Email for the bootstrapped admin account (optional, the column allows `NULL`). | Admin account has no email set. |
 | `JWT_SECRET` | Signs the login tokens for **every** user (auth). The code only checks the signature, never re-checks the role against the database — anyone who knows the value can build themselves a token with `role: admin`. | App self-generates a random value on first boot and persists it under the data directory — no action needed. Set your own only for a known, portable value (e.g. shared across instances). |
 | `UNSPLASH_ACCESS_KEY` | Random background image for the theme (`/api/unsplash/random-bg`). | App falls back to a fixed set of background image URLs — cosmetic only, no error. |
 | `HELP_VIDEO_DE` / `HELP_VIDEO_EN` | YouTube tutorial video on the help screen, per language. | Video panel is hidden, no error. |

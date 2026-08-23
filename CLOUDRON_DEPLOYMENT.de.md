@@ -53,7 +53,25 @@ konfigurierten Domains, zusätzlich `--domain drupal.de` anhängen.
 
 Nach ca. 26 Sekunden ist die (leere) App unter `https://pb.drupal.de` erreichbar.
 
-**3. App-Secrets setzen (optional)**
+**3. Ersten Admin-Account anlegen**
+
+Dafür gibt es auf einer frischen Installation keinen Weg über die App selbst: Das
+Registrierungsformular legt nur Übersetzer-/Reviewer-Accounts an, und jeder neue Account startet
+mit `is_active=0`, wartet auf Freigabe durch einen Admin — den es auf einer brandneuen Instanz noch
+nicht gibt. `ADMIN_USERNAME`/`ADMIN_PASSWORD` (optional `ADMIN_EMAIL`) vor dem ersten Start setzen,
+oder direkt danach — die App prüft bei jedem Start, ob ein Admin-Account existiert, und legt einen
+aus diesen Werten an, falls nicht:
+
+```bash
+cloudron env set --app pb.drupal.de ADMIN_USERNAME=<benutzername> ADMIN_PASSWORD=<passwort>
+```
+
+Das greift nur genau einmal — sobald ein Admin-Account existiert, werden die Env-Vars bei jedem
+weiteren Start ignoriert, das Stehenlassen ist also unbedenklich und setzt niemandem das Passwort
+zurück. Danach in der App einloggen und das Passwort ändern, falls es nicht dauerhaft in der
+Cloudron-Env-Konfiguration stehen bleiben soll.
+
+**4. Übrige App-Secrets setzen (optional)**
 
 Die App generiert beim ersten Start automatisch einen zufälligen `JWT_SECRET` und speichert ihn
 dauerhaft im Datenverzeichnis, falls keiner konfiguriert ist — für eine funktionierende
@@ -68,16 +86,16 @@ cloudron env set --app pb.drupal.de JWT_SECRET=<eigener-zufälliger-wert>
 Für Unsplash-Bildsuche und Hilfe-Videos siehe den vollständigen Befehl im
 [Abschnitt „App-Secrets" unten](#app-secrets-env-werte).
 
-**4. Weiter je nach Fall**
+**5. Weiter je nach Fall**
 
-- **Frische/leere Installation** → fertig. `https://pb.drupal.de` öffnen, ersten Account
-  registrieren, Sync von Drupal.org anstoßen.
+- **Frische/leere Installation** → fertig. `https://pb.drupal.de` öffnen, mit dem Admin-Account aus
+  Schritt 3 einloggen, Sync von Drupal.org anstoßen.
 - **Bestehende Daten übernehmen** (z. B. Umzug vom bisherigen Docker-Compose-Deployment) → weiter
   mit [Abschnitt 3](#3-nach-der-installation-bestehende-daten-importieren) unten (Datenbank-Dump
   + `translations`/`metadata`/`uploads` importieren), danach
   `cloudron restart --app pb.drupal.de`.
 
-**5. Später aktualisieren**
+**6. Später aktualisieren**
 
 ```bash
 cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:<neue-version>
@@ -190,6 +208,8 @@ ohnehin überall `process.env.X` liest:
 
 ```bash
 cloudron env set --app <subdomain> \
+  ADMIN_USERNAME=<benutzername> \
+  ADMIN_PASSWORD=<passwort> \
   JWT_SECRET=<eigener-zufälliger-wert> \
   UNSPLASH_ACCESS_KEY=<...> \
   HELP_VIDEO_DE=<youtube-link> \
@@ -208,6 +228,8 @@ das ist ein reiner Konfigurationswechsel und braucht **kein** neues Image, keine
 
 | Variable | Zweck | Wenn nicht gesetzt |
 |---|---|---|
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Legt beim Start den ersten Admin-Account an, falls noch keiner existiert — es gibt keinen Weg über die App selbst (Registrierung legt nur Übersetzer-/Reviewer-Accounts an, die auf Freigabe durch einen Admin warten, den es auf einer frischen Installation noch nicht gibt). Greift nur genau einmal; sobald ein Admin existiert, bei jedem weiteren Start ignoriert — unbedenklich, stehen zu lassen. | Es wird kein Admin-Account angelegt — man ist ohne Recovery-Weg außer direktem DB-Eingriff ausgesperrt. |
+| `ADMIN_EMAIL` | E-Mail für den gebootstrappten Admin-Account (optional, die Spalte erlaubt `NULL`). | Admin-Account hat keine E-Mail gesetzt. |
 | `JWT_SECRET` | Signiert die Login-Tokens **aller** Nutzer (Auth). Der Code prüft nur die Signatur, nicht nochmal die Rolle in der DB — wer den Wert kennt, kann sich ein Token mit `role: admin` selbst bauen. | App generiert beim ersten Start automatisch einen zufälligen Wert und speichert ihn im Datenverzeichnis — kein Handlungsbedarf. Eigenen Wert nur für einen bekannten, portablen Wert setzen (z. B. über mehrere Instanzen geteilt). |
 | `UNSPLASH_ACCESS_KEY` | Zufälliges Hintergrundbild fürs Theme (`/api/unsplash/random-bg`). | App fällt automatisch auf fest hinterlegte Bild-URLs zurück — rein kosmetisch, kein Fehler. |
 | `HELP_VIDEO_DE` / `HELP_VIDEO_EN` | YouTube-Tutorial-Video auf der Hilfeseite, je Sprache. | Video-Panel wird ausgeblendet, kein Fehler. |

@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.9] — 2026-08-23
+
+### Hinzugefügt
+
+- **Eine frische Installation hatte keinen Weg, den ersten Admin-Account anzulegen.** Beim tatsächlichen Durchtesten des Fresh-Install-Ablaufs bis zum Ende entdeckt: `POST /auth/register` akzeptiert nur `user_type` `translator`/`reviewer`, und jeder neue Account startet mit `is_active=0`, wartet auf Freigabe durch einen Admin — den es auf einer brandneuen Instanz nicht gibt. Ein echter Bootstrap-Deadlock. `ADMIN_USERNAME`/`ADMIN_PASSWORD` (plus optional `ADMIN_EMAIL`) legen diesen ersten Account jetzt beim Start an, falls gesetzt und noch kein Admin existiert — sofort aktiv, keine Freigabe nötig. Greift nur genau einmal: Ein Update oder Neustart mit weiterhin gesetzten Env-Vars tut nichts mehr, sobald ein Admin-Account existiert — kann also niemandem das Passwort zurücksetzen. `CLOUDRON_DEPLOYMENT.md`/`.de.md` und `server/.env.example` mit den neuen Variablen aktualisiert.
+
 ## [0.4.8] — 2026-08-23
 
 ### Behoben

@@ -11,6 +11,7 @@ const zlib = require('zlib');
 const mysql = require('mysql2/promise');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { registerUnsplashRoutes } = require('./unsplash');
 const { runMigrations }          = require('./db_migrate');
 
@@ -728,6 +729,43 @@ async function importSqlDump(sql) {
   return statements.length;
 }
 
+// A fresh install has no way to create the first admin account through the
+// UI: POST /auth/register only accepts user_type 'translator'/'reviewer' and
+// always inserts is_active=0, pending approval by an admin that doesn't
+// exist yet on a brand-new instance — a real bootstrap deadlock, found while
+// actually testing the fresh-install path end-to-end. If ADMIN_USERNAME and
+// ADMIN_PASSWORD are set, this creates that one admin account, active
+// immediately, no approval needed. Only acts when no admin exists yet (same
+// guard style as seedFromBundledDataIfRequested()) — an update or restart
+// with the env vars still set does nothing once an admin is there, so this
+// can't reset anyone's password out from under them. ADMIN_EMAIL is
+// optional; the column allows NULL.
+async function ensureAdminAccountIfConfigured() {
+  const { ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL } = process.env;
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD) return;
+
+  try {
+    const [[{ count }]] = await db.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'");
+    if (count > 0) {
+      console.log('[Startup] An admin account already exists — ADMIN_USERNAME/ADMIN_PASSWORD bootstrap skipped.');
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    await db.execute(
+      'INSERT INTO users (username, password, name, email, role, user_type, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [ADMIN_USERNAME, hashedPassword, ADMIN_USERNAME, ADMIN_EMAIL || null, 'admin', 'admin', 1]
+    );
+    console.log(`[Startup] Created admin account '${ADMIN_USERNAME}' from ADMIN_USERNAME/ADMIN_PASSWORD.`);
+  } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') {
+      console.error(`[Startup] ADMIN_USERNAME '${ADMIN_USERNAME}' is already taken by an existing non-admin user — bootstrap skipped. Choose a different ADMIN_USERNAME or promote that account manually.`);
+    } else {
+      console.error('[Startup] Admin account bootstrap failed (non-fatal):', e.message);
+    }
+  }
+}
+
 async function seedFromBundledDataIfRequested() {
   if (process.env.SEED_ON_FIRST_BOOT !== 'true') return;
 
@@ -929,6 +967,11 @@ app.listen(PORT, async () => {
     console.error('[Startup] KRITISCH: DB-Migration fehlgeschlagen:', e.message);
     process.exit(1); // Hard fail — Server darf nicht mit falschem Schema laufen
   }
+
+  // Bootstrap the first admin account from ADMIN_USERNAME/ADMIN_PASSWORD if
+  // set and none exists yet — see ensureAdminAccountIfConfigured() for why
+  // this has to exist at all (no in-app path creates the first admin).
+  await ensureAdminAccountIfConfigured();
 
   // Optional first-boot seed (opt-in, no-op unless SEED_ON_FIRST_BOOT=true and
   // the DB is still empty) — must run before ensureTranslationFilesFromDb() so

@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.9] — 2026-08-23
+
+### Added
+
+- **A fresh install had no path to creating the first admin account.** Found while actually testing the fresh-install flow through to the end: `POST /auth/register` only accepts `user_type` `translator`/`reviewer`, and every new account starts `is_active=0`, pending approval by an admin — who doesn't exist on a brand-new instance. A genuine bootstrap deadlock. `ADMIN_USERNAME`/`ADMIN_PASSWORD` (plus optional `ADMIN_EMAIL`) now bootstrap that first account on startup if set and no admin exists yet — active immediately, no approval step. Only fires once: an update or restart with the env vars still set does nothing once an admin account exists, so it can't reset anyone's password. `CLOUDRON_DEPLOYMENT.md`/`.de.md` and `server/.env.example` updated with the new variables.
+
 ## [0.4.8] — 2026-08-23
 
 ### Fixed
