@@ -11,6 +11,13 @@ FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c663
 
 ENV CLOUDRON=1
 
+# Cloudron reads app metadata (addons, httpPort, icon, ...) from this fixed
+# path inside the image for --image-based install/update — without it,
+# `cloudron update --image ...` fails with "No CloudronManifest.json found".
+RUN mkdir -p /app/pack
+COPY CloudronManifest.json /app/pack/CloudronManifest.json
+COPY logo.png /app/pack/logo.png
+
 RUN mkdir -p /app/code
 WORKDIR /app/code
 
