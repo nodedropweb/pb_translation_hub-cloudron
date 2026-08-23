@@ -65,7 +65,14 @@ class ApiClient {
   ApiClient._internal() {
     dio = Dio(BaseOptions(
       baseUrl: baseUrl, // getter — wird einmalig beim ersten ApiClient() Aufruf ausgewertet
-      connectTimeout: const Duration(seconds: 15),
+      // On Flutter Web, Dio's "connection timeout" covers the whole wait for
+      // a response to start (there's no raw socket API to time just the TCP
+      // handshake), so a slow server-side query trips it directly — it's not
+      // just a network-connect timeout. connectTimeout can only be set here
+      // globally; unlike receiveTimeout, Dio's per-request Options has no
+      // field for it. 15s was too tight for some of the heavier admin
+      // aggregate queries under real data volume.
+      connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
     ));
 

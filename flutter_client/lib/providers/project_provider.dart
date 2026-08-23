@@ -278,12 +278,19 @@ class FilterCountsNotifier extends Notifier<FilterCounts> {
   }
 
   // `/projects/filter-counts` runs several full-table aggregate queries
-  // (including an MD5-over-JSON scan for the stale count) and can occasionally
-  // exceed the client's default timeout under load — e.g. right after a large
-  // export streams the same tables from the same DB connection pool. That
-  // used to fail silently, leaving the dashboard stuck on all-zero counts
-  // until a manual reload. Now it logs and retries with a longer timeout
-  // instead of giving up on the first hiccup.
+  // (including an MD5-over-JSON scan for the stale count). On the live
+  // dataset those used to be awaited one at a time server-side (~16s total),
+  // just over this client's global connectTimeout (see api_client.dart) —
+  // and on Flutter Web, Dio's "connection timeout" actually covers the whole
+  // wait for a response to start, not just the TCP handshake, so a slow
+  // server-side query trips it directly (Dio's per-request `Options` has no
+  // connectTimeout override, only BaseOptions does, which is why the real
+  // fix for that lives in api_client.dart, not here). The server now runs
+  // these queries concurrently (server/routes/projects.js) instead of
+  // sequentially, cutting total time to roughly the slowest single query.
+  // This also no longer swallows failures silently — logs and retries
+  // instead of the old bare catch, which used to leave the dashboard stuck
+  // on all-zero counts until a manual reload.
   Future<void> fetchCounts(String langcode, {int? coreVersion, int attempt = 0}) async {
     try {
       final response = await _api.dio.get(
@@ -292,7 +299,7 @@ class FilterCountsNotifier extends Notifier<FilterCounts> {
           'langcode': langcode,
           if (coreVersion != null) 'core_version': coreVersion,
         },
-        options: Options(receiveTimeout: const Duration(seconds: 60)),
+        options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
       state = FilterCounts.fromJson(response.data);
     } catch (e) {

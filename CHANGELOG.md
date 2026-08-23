@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.3] — 2026-08-23
+
+### Fixed
+
+- **`/projects/filter-counts` still occasionally tripped the client's timeout after the 0.4.2 fix.** Confirmed live: on the real dataset, the endpoint's 9 independent aggregate queries were awaited one at a time, taking ~16s total wall-clock — just over the Flutter client's 15s `connectTimeout`. On Flutter Web, Dio's "connection timeout" covers the whole wait for a response to start (there's no raw socket API to time just the TCP handshake), so a slow server-side query trips it directly, and the exception surfaced as `DioException [connection timeout]` in the client logs even though the 0.4.2 retry/logging fix was working correctly. The route now runs all 9 queries concurrently via `Promise.all` (the pool allows up to 100 connections) instead of sequentially, cutting total time to roughly the single slowest query (~10s for the stale count) rather than their sum. The client's global `connectTimeout` was also raised from 15s to 30s as headroom — Dio's per-request `Options` has no field for overriding it, only `BaseOptions` does, which is why the earlier per-request `receiveTimeout` override on this call couldn't fix a connect-timeout failure.
+
 ## [0.4.2] — 2026-08-23
 
 ### Fixed

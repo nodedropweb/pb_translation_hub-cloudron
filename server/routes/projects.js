@@ -313,54 +313,72 @@ module.exports = (ctx) => {
     }
 
     try {
-      const [[allRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM projects WHERE machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`
-      );
-      // Priority: priority-listed modules not yet Drupal-12-compatible.
-      // Driven from projects p (joined, not a separate priority_projects
-      // count) so it can never show a nonzero count with an empty list —
-      // unlike the old "priority-listed AND untranslated" definition, which
-      // silently dropped priority modules never synced into `projects`.
-      const [[priorityRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM projects p
-         JOIN priority_projects pp ON pp.machine_name = p.machine_name
-         WHERE p.semver_max < 12000000
-         AND p.machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippetP}`
-      );
-      const [[missingRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM projects WHERE machine_name NOT IN (SELECT machine_name FROM translations WHERE langcode = ?) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
-        [langcode]
-      );
-      const [[reviewRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM projects WHERE machine_name IN (SELECT machine_name FROM translations WHERE langcode = ? AND is_reviewed = FALSE) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
-        [langcode]
-      );
-      const [[releasedRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM projects WHERE machine_name IN (SELECT machine_name FROM translations WHERE langcode = ? AND is_reviewed = TRUE) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
-        [langcode]
-      );
-      const [[staleRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM translations t
-         JOIN projects p ON t.machine_name = p.machine_name
-         WHERE t.langcode = ?
-           AND t.source_hash IS NOT NULL AND t.source_hash != ''
-           AND MD5(CONCAT(
-             IFNULL(JSON_UNQUOTE(JSON_EXTRACT(p.data, '$.attributes.title')), ''),
-             IFNULL(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(p.data, '$.attributes.body.summary')), 'null'), ''),
-             IFNULL(JSON_UNQUOTE(JSON_EXTRACT(p.data, '$.attributes.body.value')), '')
-           )) != t.source_hash
-           AND t.machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippetP}`,
-        [langcode]
-      );
-      const [[translatedRes]] = await db.execute(
-        `SELECT COUNT(*) as count FROM projects WHERE machine_name IN (SELECT machine_name FROM translations WHERE langcode = ?) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
-        [langcode]
-      );
-      const [[ignoredRes]] = await db.execute('SELECT COUNT(*) as count FROM ignored_projects');
-
-      // Per-version breakdown — single aggregation query using indexed generated columns.
-      const [[vcRow]] = await db.execute(
-        `SELECT
+      // These 9 queries are all independent reads, previously awaited one at
+      // a time — on the live dataset (tens of thousands of projects) that
+      // added up to ~16s wall-clock, just over the Flutter client's 15s
+      // connect timeout, which is what caused the dashboard counters to
+      // intermittently fail and get stuck at zero. Running them concurrently
+      // (the pool allows up to 100 connections, so 9 at once is nothing)
+      // drops the total to roughly the single slowest query instead of the
+      // sum of all nine.
+      const [
+        [[allRes]],
+        [[priorityRes]],
+        [[missingRes]],
+        [[reviewRes]],
+        [[releasedRes]],
+        [[staleRes]],
+        [[translatedRes]],
+        [[ignoredRes]],
+        [[vcRow]],
+      ] = await Promise.all([
+        db.execute(
+          `SELECT COUNT(*) as count FROM projects WHERE machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`
+        ),
+        // Priority: priority-listed modules not yet Drupal-12-compatible.
+        // Driven from projects p (joined, not a separate priority_projects
+        // count) so it can never show a nonzero count with an empty list —
+        // unlike the old "priority-listed AND untranslated" definition, which
+        // silently dropped priority modules never synced into `projects`.
+        db.execute(
+          `SELECT COUNT(*) as count FROM projects p
+           JOIN priority_projects pp ON pp.machine_name = p.machine_name
+           WHERE p.semver_max < 12000000
+           AND p.machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippetP}`
+        ),
+        db.execute(
+          `SELECT COUNT(*) as count FROM projects WHERE machine_name NOT IN (SELECT machine_name FROM translations WHERE langcode = ?) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
+          [langcode]
+        ),
+        db.execute(
+          `SELECT COUNT(*) as count FROM projects WHERE machine_name IN (SELECT machine_name FROM translations WHERE langcode = ? AND is_reviewed = FALSE) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
+          [langcode]
+        ),
+        db.execute(
+          `SELECT COUNT(*) as count FROM projects WHERE machine_name IN (SELECT machine_name FROM translations WHERE langcode = ? AND is_reviewed = TRUE) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
+          [langcode]
+        ),
+        db.execute(
+          `SELECT COUNT(*) as count FROM translations t
+           JOIN projects p ON t.machine_name = p.machine_name
+           WHERE t.langcode = ?
+             AND t.source_hash IS NOT NULL AND t.source_hash != ''
+             AND MD5(CONCAT(
+               IFNULL(JSON_UNQUOTE(JSON_EXTRACT(p.data, '$.attributes.title')), ''),
+               IFNULL(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(p.data, '$.attributes.body.summary')), 'null'), ''),
+               IFNULL(JSON_UNQUOTE(JSON_EXTRACT(p.data, '$.attributes.body.value')), '')
+             )) != t.source_hash
+             AND t.machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippetP}`,
+          [langcode]
+        ),
+        db.execute(
+          `SELECT COUNT(*) as count FROM projects WHERE machine_name IN (SELECT machine_name FROM translations WHERE langcode = ?) AND machine_name NOT IN (SELECT machine_name FROM ignored_projects)${vSnippet}`,
+          [langcode]
+        ),
+        db.execute('SELECT COUNT(*) as count FROM ignored_projects'),
+        // Per-version breakdown — single aggregation query using indexed generated columns.
+        db.execute(
+          `SELECT
           SUM(CASE WHEN p.semver_min <= 9999999  AND p.semver_max >= 9000000  THEN 1 ELSE 0 END) AS v9_all,
           SUM(CASE WHEN p.semver_min <= 10999999 AND p.semver_max >= 10000000 THEN 1 ELSE 0 END) AS v10_all,
           SUM(CASE WHEN p.semver_min <= 11999999 AND p.semver_max >= 11000000 THEN 1 ELSE 0 END) AS v11_all,
@@ -381,8 +399,9 @@ module.exports = (ctx) => {
         LEFT JOIN translations t ON t.machine_name = p.machine_name AND t.langcode = ?
         LEFT JOIN ignored_projects ig ON ig.machine_name = p.machine_name
         WHERE ig.machine_name IS NULL`,
-        [langcode]
-      );
+          [langcode]
+        ),
+      ]);
       const versionCounts = {};
       for (const v of [9, 10, 11, 12]) {
         versionCounts[v] = {

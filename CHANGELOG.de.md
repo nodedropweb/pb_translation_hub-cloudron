@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.3] — 2026-08-23
+
+### Behoben
+
+- **`/projects/filter-counts` löste nach dem 0.4.2-Fix gelegentlich immer noch das Timeout des Clients aus.** Live bestätigt: Auf dem echten Datenbestand wurden die 9 unabhängigen Aggregat-Queries des Endpoints nacheinander abgewartet und brauchten in Summe ~16 s — knapp über dem 15-s-`connectTimeout` des Flutter-Clients. Auf Flutter Web deckt Dios "connection timeout" die gesamte Wartezeit bis zum Beginn einer Antwort ab (es gibt keine Low-Level-Socket-API, um nur den TCP-Handshake zu messen), sodass eine langsame serverseitige Query es direkt auslöst — die Exception erschien als `DioException [connection timeout]` in den Client-Logs, obwohl der Retry-/Logging-Fix aus 0.4.2 korrekt funktionierte. Der Endpoint führt die 9 Queries jetzt über `Promise.all` parallel aus (der Pool erlaubt bis zu 100 Verbindungen) statt sequenziell, wodurch sich die Gesamtzeit auf etwa die langsamste Einzel-Query (~10 s für den Stale-Zähler) statt deren Summe reduziert. Der globale `connectTimeout` des Clients wurde außerdem von 15 s auf 30 s als Puffer angehoben — Dios `Options` pro Request hat kein Feld dafür, nur `BaseOptions`, weshalb das vorherige `receiveTimeout`-Override pro Aufruf einen Connect-Timeout-Fehler gar nicht beheben konnte.
+
 ## [0.4.2] — 2026-08-23
 
 ### Behoben
