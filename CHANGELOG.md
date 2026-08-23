@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.4] — 2026-08-23
+
+### Fixed
+
+- **Export button now hit the same connection-timeout class of bug the 0.4.2 redesign was meant to avoid.** Confirmed live: `DioException [connection timeout]` on `GET /admin/export-seed` after 30s. The 0.4.2 two-phase redesign moved dump-building server-side before any response is sent (so the actual download step is instant) — but that means this request now has to wait for the *entire* dump to finish building before it gets a response at all, unlike the old direct-stream version whose first bytes arrived almost immediately. The regular API client's `connectTimeout` (30s, tuned for normal calls) covers exactly that "wait for a response to start" window on Flutter Web, so it now trips on a large dump the same way it used to trip on the download itself. Added `ApiClient.longRunningDio` — a second Dio instance sharing the same base URL and auth/logging interceptors as the default one, but with a 5-minute `connectTimeout`/`receiveTimeout` — and pointed the export-seed request at it instead of raising the global timeout (which would make every ordinary call wait 5 minutes before reporting a genuinely down server).
+
 ## [0.4.3] — 2026-08-23
 
 ### Fixed

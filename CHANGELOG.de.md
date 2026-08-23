@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.4] — 2026-08-23
+
+### Behoben
+
+- **Der Export-Button traf jetzt dieselbe Art von Connection-Timeout-Fehler, die das 0.4.2-Redesign eigentlich vermeiden sollte.** Live bestätigt: `DioException [connection timeout]` bei `GET /admin/export-seed` nach 30 s. Das Zwei-Phasen-Redesign aus 0.4.2 verlagerte den Dump-Aufbau serverseitig vor den Versand jeder Antwort (damit der eigentliche Download-Schritt sofort geht) — das bedeutet aber, dass dieser Request jetzt warten muss, bis der **komplette** Dump fertig gebaut ist, bevor überhaupt eine Antwort kommt, anders als bei der alten Direkt-Stream-Version, deren erste Bytes fast sofort ankamen. Der `connectTimeout` (30 s, auf normale Aufrufe zugeschnitten) des regulären API-Clients deckt auf Flutter Web genau dieses "Warten bis Antwortbeginn"-Fenster ab und löst jetzt bei einem großen Dump genauso aus wie vorher beim Download selbst. Neu: `ApiClient.longRunningDio` — eine zweite Dio-Instanz mit derselben Basis-URL und denselben Auth-/Logging-Interceptors wie die Standardinstanz, aber mit 5 Minuten `connectTimeout`/`receiveTimeout` — und der Export-Seed-Request nutzt jetzt diese, statt das globale Timeout anzuheben (was jeden gewöhnlichen Aufruf 5 Minuten warten lassen würde, bevor ein wirklich ausgefallener Server gemeldet wird).
+
 ## [0.4.3] — 2026-08-23
 
 ### Behoben

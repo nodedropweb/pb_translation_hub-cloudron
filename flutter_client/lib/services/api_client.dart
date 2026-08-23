@@ -7,6 +7,24 @@ class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   late final Dio dio;
 
+  /// A second client, sharing the same base URL and auth/logging
+  /// interceptors as [dio], but with a much longer `connectTimeout` — for
+  /// the rare admin request that has to finish real server-side work (e.g.
+  /// building a full DB export) before it can send back so much as a status
+  /// line. `dio`'s 30s default is deliberately tight for everyday calls, but
+  /// on Flutter Web "connection timeout" covers the whole wait for a
+  /// response to start, not just the TCP handshake — so it's the wrong tool
+  /// for a request that's slow by design rather than by network trouble.
+  /// Lazily created since almost nothing needs it.
+  Dio? _longRunningDio;
+  Dio get longRunningDio {
+    return _longRunningDio ??= Dio(dio.options.copyWith(
+      connectTimeout: const Duration(minutes: 5),
+      receiveTimeout: const Duration(minutes: 5),
+    ))
+      ..interceptors.addAll(dio.interceptors);
+  }
+
   /// Ermittelt die API-Basis-URL zur Laufzeit.
   ///
   /// - Lokal (localhost / 127.0.0.1 / nicht-Standard-Port): direkter Zugriff

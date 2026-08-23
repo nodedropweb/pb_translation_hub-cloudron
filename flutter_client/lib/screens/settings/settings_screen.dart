@@ -363,7 +363,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // browser download instead (see browser_download_web.dart) sidesteps
       // that entirely and needs no Authorization header, since the token
       // itself gates the second request.
-      final response = await _api.dio.get('/admin/export-seed');
+      //
+      // This request now has to wait for the ENTIRE dump to finish building
+      // server-side before it gets any response at all — unlike the old
+      // direct-stream version, whose first bytes arrived almost immediately.
+      // The regular `_api.dio` (30s connectTimeout, tuned for normal calls)
+      // isn't enough for that; this is the one call in the app that
+      // deliberately uses the long-timeout client instead.
+      final response = await _api.longRunningDio.get('/admin/export-seed');
       final token = response.data['token'] as String;
       final filename = response.data['filename'] as String;
       final downloadUrl = '${ApiClient.baseUrl}/admin/export-seed/download/$token';
