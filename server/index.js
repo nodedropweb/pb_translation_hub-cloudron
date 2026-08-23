@@ -751,7 +751,21 @@ async function importSqlDump(sqlGzPath) {
   try {
     for await (const rawLine of rl) {
       const line = rawLine.trim();
-      if (!line || line.startsWith('--')) continue;
+      // Only actual data statements are executed — everything else is
+      // skipped, not just comments. This dump is meant to be data-only (the
+      // schema already exists via migrations), but a real-world producer can
+      // still be `mariadb-dump`, which wraps the tables it dumps in session
+      // housekeeping — `SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;`
+      // paired with `SET AUTOCOMMIT=@OLD_AUTOCOMMIT;`, `LOCK/UNLOCK TABLES`,
+      // charset/collation save-restore, etc. — confirmed live via
+      // export_for_cloudron.sh's output: batching splits a table's capture
+      // and restore lines across separate round trips, and MySQL 8 rejected
+      // the restore with "Variable 'autocommit' can't be set to the value of
+      // NULL". Rather than enumerate every boilerplate variant a dump tool
+      // might emit (fragile — easy to miss one, and different mysqldump
+      // versions/flags produce different sets), whitelist the one statement
+      // shape actually needed instead.
+      if (!/^INSERT INTO /i.test(line)) continue;
       // Each line is already exactly one complete statement (see the
       // producers named above), terminated by ';' — kept as-is here, since
       // multipleStatements needs that terminator between batched statements.

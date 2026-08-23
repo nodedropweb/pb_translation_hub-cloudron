@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.16] — 2026-08-23
+
+### Behoben
+
+- **Der Import eines echten, von `mariadb-dump` erzeugten Recovery-Files scheiterte mit `Variable 'autocommit' can't be set to the value of NULL`.** `mariadb-dump` umschließt jede Tabelle, die es dumpt, mit Session-Housekeeping — `SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;` gepaart mit einem späteren `SET AUTOCOMMIT=@OLD_AUTOCOMMIT;`, dazu `LOCK`/`UNLOCK TABLES`, Zeichensatz-/Kollations-Sicherung-Wiederherstellung usw. Live bestätigt: Das Batching aus `importSqlDump()` (0.4.15) trennte bei einer großen Tabelle die Capture- und Restore-Zeile über getrennte Roundtrips, und MySQL 8 lehnte die Wiederherstellung ab. Statt jede mögliche Boilerplate-Variante, die ein Dump-Tool erzeugen könnte, einzeln aufzuzählen — fragil, leicht wird eine übersehen —, whitelistet der Import jetzt genau die eine Statement-Form, die tatsächlich gebraucht wird (`INSERT INTO ...`), und überspringt alles andere, statt wie bisher nur Leerzeilen und `--`-Kommentare zu überspringen.
+
 ## [0.4.15] — 2026-08-23
 
 ### Behoben
