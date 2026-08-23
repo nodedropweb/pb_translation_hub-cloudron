@@ -751,10 +751,17 @@ async function ensureAdminAccountIfConfigured() {
       return;
     }
 
+    // user_type is an ENUM('translator', 'reviewer') — it distinguishes
+    // those two roles for a non-admin account and doesn't accept 'admin' at
+    // all (found the hard way: this used to insert 'admin' here too, which
+    // MySQL rejected with "Data truncated for column 'user_type'", silently
+    // failing the whole bootstrap). It's irrelevant for an actual admin —
+    // `role = 'admin'` alone already satisfies every isAdmin/isReviewerOrAdmin
+    // check in the app — so this just leaves it at its schema default.
     const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
     await db.execute(
       'INSERT INTO users (username, password, name, email, role, user_type, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [ADMIN_USERNAME, hashedPassword, ADMIN_USERNAME, ADMIN_EMAIL || null, 'admin', 'admin', 1]
+      [ADMIN_USERNAME, hashedPassword, ADMIN_USERNAME, ADMIN_EMAIL || null, 'admin', 'translator', 1]
     );
     console.log(`[Startup] Created admin account '${ADMIN_USERNAME}' from ADMIN_USERNAME/ADMIN_PASSWORD.`);
   } catch (e) {

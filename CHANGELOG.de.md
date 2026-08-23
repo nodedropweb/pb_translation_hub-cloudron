@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.10] — 2026-08-23
+
+### Behoben
+
+- **Der Admin-Bootstrap aus 0.4.9 schlug bei jedem Versuch stillschweigend fehl.** Beim Deployen von 0.4.9 zur tatsächlichen Verifikation entdeckt: `[Startup] Admin account bootstrap failed (non-fatal): Data truncated for column 'user_type' at row 1`. `user_type` ist `ENUM('translator', 'reviewer')` — unterscheidet diese beiden Rollen für einen Nicht-Admin-Account und akzeptiert `'admin'` überhaupt nicht, der Insert setzte ihn aber trotzdem darauf, was MySQL rundweg ablehnte. Im Ergebnis harmlos (die Funktion loggt und macht weiter, statt den Start zu crashen), aber der Admin-Account wurde nie angelegt. `user_type` ist für einen echten Admin irrelevant — `role = 'admin'` allein erfüllt bereits jede `isAdmin`/`isReviewerOrAdmin`-Prüfung in der App —, weshalb der Insert die Spalte jetzt einfach auf ihrem Schema-Default (`'translator'`) belässt.
+
 ## [0.4.9] — 2026-08-23
 
 ### Hinzugefügt

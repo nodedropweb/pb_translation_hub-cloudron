@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.10] — 2026-08-23
+
+### Fixed
+
+- **0.4.9's admin bootstrap silently failed on every attempt.** Deploying 0.4.9 to actually verify it: `[Startup] Admin account bootstrap failed (non-fatal): Data truncated for column 'user_type' at row 1`. `user_type` is `ENUM('translator', 'reviewer')` — it distinguishes those two roles for a non-admin account and doesn't accept `'admin'` at all, but the insert set it to `'admin'` anyway, which MySQL rejected outright. Harmless in outcome (the function logs and continues rather than crashing startup) but the admin account never got created. `user_type` is irrelevant for an actual admin — `role = 'admin'` alone already satisfies every `isAdmin`/`isReviewerOrAdmin` check in the app — so the insert now just leaves it at its schema default (`'translator'`) instead.
+
 ## [0.4.9] — 2026-08-23
 
 ### Added
