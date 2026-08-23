@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.1] — 2026-08-23
+
+### Behoben
+
+- **`GET /api/admin/export-seed` hat die gesamte App per OOM abgeschossen.** `projects` allein enthält den kompletten Drupal.org-Katalog (zehntausende Zeilen, je mit einem JSON-Blob) — die 0.4.0-Version hat pro Zeile einen `INSERT`-String gebaut, alle in einem Array gesammelt, zu einem Riesenstring zusammengefügt und dann in einem Rutsch gzippt — hält dabei mehrere volle Kopien derselben Daten gleichzeitig im Speicher. Auf der Live-Testinstanz bestätigt: Node hat das Heap-Limit des Containers gesprengt und ist abgestürzt, dabei auch andere gerade laufende Anfragen mit kurzem 502 mitgerissen (ein einziger Container, ein einziger Prozess für alle Routen). Streamt jetzt Zeilen direkt aus MySQL in einen Gzip-Stream, der direkt in die Response gepiped wird, mit Backpressure über `write()`/`drain` — der Speicherverbrauch bleibt damit unabhängig von der Tabellengröße ungefähr konstant.
+
 ## [0.4.0] — 2026-08-23
 
 ### Hinzugefügt

@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.1] — 2026-08-23
+
+### Fixed
+
+- **`GET /api/admin/export-seed` OOM-crashed the whole app.** `projects` alone holds the entire Drupal.org catalog (tens of thousands of rows with a JSON blob each) — the 0.4.0 version built every `INSERT` line into an array, joined it into one string, then gzipped that in one shot, holding several full copies of the same data in memory at once. Confirmed on the live test instance: Node hit its container's heap limit and crashed, taking down every other in-flight request too (single container, single process for all routes) with a brief 502. Now streams rows straight from MySQL into a gzip stream piped directly to the response, with backpressure via `write()`/`drain`, so memory stays roughly constant regardless of table size.
+
 ## [0.4.0] — 2026-08-23
 
 ### Added
