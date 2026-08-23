@@ -3,15 +3,31 @@ const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const AdmZip = require('adm-zip');
 
 // Content tables included in a seed export — mirrors export_for_cloudron.sh
 // --seed / seedFromBundledDataIfRequested() in index.js. Deliberately excludes
 // `users` and `schema_migrations`: a seeded instance gets its own fresh admin
 // account via normal registration, and migration bookkeeping stays untouched.
+//
+// Every table here except `glossary_terms` has a real natural primary/unique
+// key (checked against server/migrations/*.sql), so the generated INSERTs use
+// ON DUPLICATE KEY UPDATE — the same export works both to seed an empty DB
+// (first boot) and to re-import into an already-populated live instance
+// (admin-triggered, via POST /upload-backup), upserting instead of crashing
+// on the first duplicate key. `glossary_terms` only has an auto-increment
+// `id` with no other unique constraint, so it stays a plain INSERT — a repeat
+// import will duplicate glossary entries rather than update them. Fixing that
+// would need a real UNIQUE(lang_code, source_word) constraint added via a new
+// migration, which isn't safe to add blind against unknown live data (could
+// already contain duplicates that the migration would then fail on) — left
+// as a known limitation rather than risking a migration that breaks on
+// deploy.
 const SEED_TABLES = [
   'projects', 'translations', 'glossary_terms',
   'priority_projects', 'ignored_projects', 'sync_events', 'site_settings',
 ];
+const NO_UPSERT_TABLES = new Set(['glossary_terms']);
 
 // Pending exports built by GET /admin/export-seed, waiting to be picked up by
 // GET /admin/export-seed/download/:token. token -> { filePath, filename, expiresAt }.
@@ -32,9 +48,10 @@ function cleanupExpiredExports() {
 }
 
 module.exports = (ctx) => {
-  const { db, authenticateToken, isAdmin, DATA_DIR } = ctx;
+  const { db, authenticateToken, isAdmin, DATA_DIR, TRANSLATIONS_DIR } = ctx;
   const router = express.Router();
   const EXPORT_DIR = path.join(DATA_DIR, 'exports');
+  const CATEGORIES_FILENAME = '_categories.json'; // keep in sync with routes/categories.js's CAT_FILENAME
 
   // Get active (approved) users — excludes the requesting admin
   router.get('/admin/users/active', authenticateToken, isAdmin, async (req, res) => {
@@ -127,13 +144,25 @@ module.exports = (ctx) => {
     }
   });
 
-  // Export a content-only snapshot of the current DB as a gzipped SQL dump —
-  // same tables/statement format the first-boot seed importer expects
-  // (server/index.js: seedFromBundledDataIfRequested()), so the downloaded
-  // file can be dropped straight in as server/seed/db_seed.sql.gz before the
-  // next Cloudron image build. Built entirely from the already-open mysql2
-  // pool (no mariadb-dump/mysqldump binary involved), so it works regardless
-  // of what client tools a given deployment target ships.
+  // Export a content snapshot of the current instance — a zip bundling:
+  //   - db_seed.sql.gz: gzipped SQL dump of SEED_TABLES, same statement
+  //     format the first-boot seed importer expects
+  //     (server/index.js: seedFromBundledDataIfRequested() /
+  //     importSqlDump()), upsert-safe (see NO_UPSERT_TABLES above) so the
+  //     same file works both to seed an empty DB and to re-import into an
+  //     already-populated live instance.
+  //   - translations/<langcode>/_categories.json for every language that has
+  //     one: module-category name translations. These live ONLY on disk —
+  //     there's no DB table backing them (see routes/categories.js) — so a
+  //     DB-only export used to silently drop them entirely. Discovered
+  //     2026-08-23 while testing this feature: with ~116 target languages,
+  //     re-baking a fresh image for every content change isn't workable, so
+  //     this export/import round-trip needs to carry everything, not just
+  //     what happens to live in the database.
+  //
+  // Built entirely from the already-open mysql2 pool (no mariadb-dump/
+  // mysqldump binary involved), so it works regardless of what client tools a
+  // given deployment target ships.
   //
   // `projects` alone holds the entire Drupal.org catalog (tens of thousands
   // of rows with a JSON blob each) — an earlier version that buffered every
@@ -141,8 +170,8 @@ module.exports = (ctx) => {
   // that in one shot, OOM-crashed the Node process on a real instance
   // (heap blew past its container limit holding several full copies of the
   // same data at once). This streams rows straight from MySQL into a gzip
-  // stream, still with constant memory — but now into a temp file on disk
-  // instead of straight onto the response.
+  // stream, still with constant memory — into a temp file on disk, which
+  // then gets bundled into the final zip alongside the category files.
   //
   // Two-phase on purpose: building the dump takes a while (tens of MB), and
   // an earlier version that streamed it directly as the response of this
@@ -159,11 +188,12 @@ module.exports = (ctx) => {
     await fs.promises.mkdir(EXPORT_DIR, { recursive: true });
 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const filename = `pb_hub_seed_${stamp}.sql.gz`;
-    const filePath = path.join(EXPORT_DIR, `${crypto.randomUUID()}.sql.gz`);
+    const filename = `pb_hub_seed_${stamp}.zip`;
+    const sqlPath = path.join(EXPORT_DIR, `${crypto.randomUUID()}.sql.gz`);
+    const zipPath = path.join(EXPORT_DIR, `${crypto.randomUUID()}.zip`);
 
     const gzip = zlib.createGzip();
-    const fileStream = fs.createWriteStream(filePath);
+    const fileStream = fs.createWriteStream(sqlPath);
     gzip.pipe(fileStream);
 
     const writeAndDrain = (chunk) => {
@@ -181,9 +211,12 @@ module.exports = (ctx) => {
         for await (const row of rowStream) {
           const columns = Object.keys(row);
           const values = columns.map((col) => db.escape(row[col]));
-          await writeAndDrain(
-            `INSERT INTO \`${table}\` (${columns.map((c) => `\`${c}\``).join(',')}) VALUES (${values.join(',')});\n`
-          );
+          const columnList = columns.map((c) => `\`${c}\``).join(',');
+          let stmt = `INSERT INTO \`${table}\` (${columnList}) VALUES (${values.join(',')})`;
+          if (!NO_UPSERT_TABLES.has(table)) {
+            stmt += ` ON DUPLICATE KEY UPDATE ${columns.map((c) => `\`${c}\`=VALUES(\`${c}\`)`).join(',')}`;
+          }
+          await writeAndDrain(`${stmt};\n`);
         }
       }
 
@@ -193,14 +226,28 @@ module.exports = (ctx) => {
         fileStream.on('error', reject);
       });
 
+      const zip = new AdmZip();
+      zip.addLocalFile(sqlPath, '', 'db_seed.sql.gz');
+
+      const langcodes = await fs.promises.readdir(TRANSLATIONS_DIR).catch(() => []);
+      for (const lc of langcodes) {
+        const catPath = path.join(TRANSLATIONS_DIR, lc, CATEGORIES_FILENAME);
+        if (await fs.promises.stat(catPath).then(() => true).catch(() => false)) {
+          zip.addLocalFile(catPath, `translations/${lc}`, CATEGORIES_FILENAME);
+        }
+      }
+      zip.writeZip(zipPath);
+      await fs.promises.unlink(sqlPath);
+
       const token = crypto.randomBytes(32).toString('hex');
-      pendingExports.set(token, { filePath, filename, expiresAt: Date.now() + EXPORT_TTL_MS });
+      pendingExports.set(token, { filePath: zipPath, filename, expiresAt: Date.now() + EXPORT_TTL_MS });
       res.json({ token, filename });
     } catch (err) {
       console.error('[Export-Seed]', err.message);
       gzip.destroy();
       fileStream.destroy();
-      fs.unlink(filePath, () => {});
+      fs.unlink(sqlPath, () => {});
+      fs.unlink(zipPath, () => {});
       res.status(500).json({ error: 'Export failed' });
     } finally {
       if (conn) conn.release();
@@ -222,7 +269,7 @@ module.exports = (ctx) => {
     pendingExports.delete(req.params.token);
 
     res.set({
-      'Content-Type': 'application/gzip',
+      'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${entry.filename}"`,
     });
 

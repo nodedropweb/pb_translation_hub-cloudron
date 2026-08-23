@@ -9,6 +9,18 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.5] — 2026-08-23
+
+### Added
+
+- **`export-seed` now carries module-category name translations, not just DB content.** Discovered while testing the export/import flow with the real target of ~116 languages: category translations (`_categories.json`, the UUID→name map for module categories) live *only* on disk — there's no DB table backing them at all (see `routes/categories.js`) — so a DB-only export was silently dropping them. `GET /admin/export-seed` now produces a `.zip` bundling `db_seed.sql.gz` (unchanged content, same tables) plus `translations/<langcode>/_categories.json` for every language that has one.
+- **`POST /upload-backup` ("Backup einspielen" in Settings) is now the import counterpart to `export-seed`, in addition to its existing plain-file restore.** If the uploaded zip contains a `db_seed.sql.gz` (i.e. it's an export-seed archive), its SQL statements are executed against the DB via the same `importSqlDump()` used by the first-boot seed, before the existing sanitize step removes it. A plain translations-only backup with no `db_seed.sql.gz` inside restores exactly as before — nothing changes for that path. The response now includes an `sqlImport` field reporting the outcome of the SQL step separately from the file restore.
+- **The exported SQL dump is now upsert-safe.** Every `SEED_TABLES` table except `glossary_terms` has a real natural primary/unique key (verified against `server/migrations/*.sql`), so generated `INSERT`s now carry `ON DUPLICATE KEY UPDATE` for every column. The same file that seeds an empty database on first boot can now also be re-imported into an already-populated live instance without crashing on the first duplicate key — the actual point of this feature, since re-baking a fresh Docker image for every translation change isn't workable at this scale. `glossary_terms` only has an auto-increment `id` with no other unique constraint, so it stays a plain `INSERT` — repeat imports will duplicate glossary entries rather than update them; fixing that would need a new `UNIQUE(lang_code, source_word)` migration, which isn't safe to add blind against unknown existing live data, so it's left as a known, documented limitation rather than risking a migration that fails on deploy.
+
+### Removed
+
+- **The "Sync D11 List" button in Settings.** Drupal 11 compatibility tracking is no longer the active focus (D12/13 support is planned but not yet built out), and the button had become stale. Its handler (`_handlePrioritySync`, `POST /sync/priority`) is removed from the UI; the `priority_projects` table and its use in the dashboard's priority filter/count are untouched.
+
 ## [0.4.4] — 2026-08-23
 
 ### Fixed

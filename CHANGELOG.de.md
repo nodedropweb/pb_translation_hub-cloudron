@@ -9,6 +9,18 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.5] — 2026-08-23
+
+### Hinzugefügt
+
+- **`export-seed` transportiert jetzt auch Kategorie-Namensübersetzungen, nicht nur DB-Inhalte.** Beim Testen des Export-/Import-Ablaufs mit dem realen Ziel von ~116 Sprachen entdeckt: Kategorie-Übersetzungen (`_categories.json`, das UUID→Name-Mapping für Modul-Kategorien) leben **ausschließlich** auf der Platte — dafür gibt es überhaupt keine DB-Tabelle (siehe `routes/categories.js`) —, weshalb ein reiner DB-Export sie bisher stillschweigend fallen ließ. `GET /admin/export-seed` erzeugt jetzt ein `.zip`, das `db_seed.sql.gz` (unverändert, gleiche Tabellen) plus `translations/<langcode>/_categories.json` für jede Sprache mit vorhandener Datei bündelt.
+- **`POST /upload-backup` ("Backup einspielen" in den Einstellungen) ist jetzt zusätzlich zum bestehenden reinen Datei-Restore das Import-Gegenstück zu `export-seed`.** Enthält das hochgeladene Zip ein `db_seed.sql.gz` (also ein Export-Seed-Archiv), werden dessen SQL-Statements über dasselbe `importSqlDump()` wie beim First-Boot-Seed in die DB importiert, bevor der bestehende Sanitize-Schritt sie entfernt. Ein reines Übersetzungs-Backup ohne `db_seed.sql.gz` wird exakt wie bisher wiederhergestellt — an diesem Pfad ändert sich nichts. Die Antwort enthält jetzt ein `sqlImport`-Feld, das das Ergebnis des SQL-Schritts getrennt vom Datei-Restore meldet.
+- **Der exportierte SQL-Dump ist jetzt upsert-sicher.** Jede Tabelle in `SEED_TABLES` außer `glossary_terms` hat einen echten fachlichen Primary-/Unique-Key (gegen `server/migrations/*.sql` verifiziert), weshalb generierte `INSERT`s jetzt `ON DUPLICATE KEY UPDATE` für jede Spalte tragen. Dieselbe Datei, die eine leere Datenbank beim ersten Start seedet, kann jetzt auch in eine bereits befüllte Live-Instanz re-importiert werden, ohne beim ersten Duplicate-Key abzustürzen — genau der Zweck dieses Features, da ein frisches Docker-Image für jede Übersetzungsänderung bei dieser Größenordnung nicht praktikabel ist. `glossary_terms` hat nur eine Auto-Increment-`id` ohne weiteren Unique-Constraint und bleibt daher bei Plain-`INSERT` — wiederholte Importe duplizieren Glossareinträge statt sie zu aktualisieren; das zu beheben würde eine neue `UNIQUE(lang_code, source_word)`-Migration erfordern, die nicht sicher blind gegen unbekannte vorhandene Live-Daten anwendbar ist — bewusst als bekannte, dokumentierte Einschränkung belassen, statt eine beim Deploy fehlschlagende Migration zu riskieren.
+
+### Entfernt
+
+- **Der Button "D11 Liste einlesen" in den Einstellungen.** Drupal-11-Kompatibilitäts-Tracking ist nicht mehr der aktive Fokus (D12/13-Unterstützung ist geplant, aber noch nicht gebaut), der Button war veraltet. Sein Handler (`_handlePrioritySync`, `POST /sync/priority`) wurde aus der UI entfernt; die Tabelle `priority_projects` und ihre Nutzung im Priority-Filter/-Zähler des Dashboards bleiben unangetastet.
+
 ## [0.4.4] — 2026-08-23
 
 ### Behoben

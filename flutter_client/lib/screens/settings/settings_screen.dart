@@ -247,40 +247,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _handlePrioritySync() async {
-    setState(() {
-      _syncing = true;
-    });
-
-    final l10n = AppLocalizations.of(context)!;
-
-    try {
-      final res = await _api.dio.post('/sync/priority');
-      final count = res.data['count'] ?? 0;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.settingsPrioritySyncSuccess(count.toString())),
-            backgroundColor: const Color(0xFF2E7D32),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.settingsPrioritySyncError(e.toString())),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    } finally {
-      setState(() {
-        _syncing = false;
-      });
-    }
-  }
-
   Future<void> _pickAndUploadBackup(ThemeAttributes attrs, AppLocalizations l10n) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -319,10 +285,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
 
       final count = response.data['count'] ?? 0;
+      // sqlImport is only present when the uploaded archive was an
+      // export-seed zip (contained a db_seed.sql.gz) — a plain
+      // translations-only backup leaves it null, and the message stays as
+      // before. Not localized, same as the export failure detail below —
+      // this is diagnostic admin-only text, not part of the translated UI.
+      final sqlImport = response.data['sqlImport'];
+      var message = l10n.settingsBackupSuccess(count.toString());
+      if (sqlImport is Map && sqlImport['success'] == true) {
+        message += ' + ${sqlImport['statements']} SQL statements imported';
+      } else if (sqlImport is Map && sqlImport['success'] == false) {
+        message += ' (SQL import failed: ${sqlImport['error']})';
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.settingsBackupSuccess(count.toString())),
+            content: Text(message),
             backgroundColor: const Color(0xFF2E7D32),
           ),
         );
@@ -343,10 +321,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  // Downloads a content-only snapshot of the current DB (same tables/format
-  // as export_for_cloudron.sh --seed) so it can be dropped straight into
-  // server/seed/db_seed.sql.gz before the next Cloudron image build — no SSH
-  // to the server or shell access required, just an admin login.
+  // Downloads a content snapshot of the instance — a zip bundling the DB's
+  // content tables (db_seed.sql.gz, same tables export_for_cloudron.sh --seed
+  // covers) plus every language's _categories.json (module-category name
+  // translations, which live only on disk, not in the DB — a DB-only export
+  // used to silently drop them). Restoring it is the "Backup einspielen"
+  // button above (_pickAndUploadBackup), which detects the embedded SQL dump
+  // and imports it via upsert, on top of its existing plain-file restore.
   Future<void> _exportSeed(AppLocalizations l10n) async {
     setState(() {
       _exportingSeed = true;
@@ -1132,43 +1113,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             style: TextStyle(color: attrs.textMuted, fontSize: 13),
                           ),
                           const SizedBox(height: 20),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: _syncing ? null : _handleSync,
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    backgroundColor: attrs.brand600,
-                                  ),
-                                  icon: _syncing 
-                                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                      : const Icon(LucideIcons.refreshCw, size: 16),
-                                  label: Text(
-                                    _syncing
-                                        ? l10n.settingsSyncing
-                                        : l10n.settingsSyncNow,
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _syncing ? null : _handlePrioritySync,
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    side: BorderSide(color: attrs.borderMain),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  icon: Icon(LucideIcons.zap, size: 16, color: Colors.amber[600]),
-                                  label: Text(
-                                    l10n.settingsSyncD11List,
-                                    style: TextStyle(color: attrs.textMain, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          ElevatedButton.icon(
+                            onPressed: _syncing ? null : _handleSync,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: attrs.brand600,
+                            ),
+                            icon: _syncing
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(LucideIcons.refreshCw, size: 16),
+                            label: Text(
+                              _syncing
+                                  ? l10n.settingsSyncing
+                                  : l10n.settingsSyncNow,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ],
                       ),

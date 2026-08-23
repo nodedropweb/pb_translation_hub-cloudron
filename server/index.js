@@ -617,7 +617,8 @@ const ctx = {
   getExcerpt,
   getFilteredIndex,
   upload,
-  uploadAvatar
+  uploadAvatar,
+  importSqlDump
 };
 
 // --- Health endpoint (circuit breaker probe for pb_localizer) ---
@@ -662,6 +663,36 @@ app.use((err, req, res, next) => {
 // untouched. translation JSON files are NOT part of the seed — they're
 // already regenerated from the now-populated `translations` table by
 // ensureTranslationFilesFromDb() below, so nothing extra is needed for that.
+// Executes a `.sql` dump statement-by-statement (like db_migrate.js) rather
+// than as one multipleStatements query — a seed with tens of thousands of
+// lines as a single query exceeds MySQL's `max_allowed_packet` (hit in
+// practice: "Got a packet bigger than 'max_allowed_packet' bytes"). Individual
+// INSERTs stay small since both export producers (export_for_cloudron.sh
+// --seed and GET /api/admin/export-seed) deliberately write one statement per
+// line. Shared by the first-boot seed below and the admin-triggered import in
+// routes/translations.js (POST /upload-backup), so both go through the same
+// tested execution path. Returns the statement count; throws on failure —
+// callers decide whether that's fatal for them.
+async function importSqlDump(sql) {
+  const statements = sql
+    .split('\n')
+    .filter(line => !line.trim().startsWith('--') && line.trim() !== '')
+    .join('\n')
+    .split(/;\s*\n/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  const conn = await db.getConnection();
+  try {
+    for (const stmt of statements) {
+      await conn.query(stmt);
+    }
+  } finally {
+    conn.release();
+  }
+  return statements.length;
+}
+
 async function seedFromBundledDataIfRequested() {
   if (process.env.SEED_ON_FIRST_BOOT !== 'true') return;
 
@@ -684,32 +715,12 @@ async function seedFromBundledDataIfRequested() {
 
   console.log('[Seed] Importiere gebackenes Seed-Paket …');
   const sql = zlib.gunzipSync(await fs.readFile(seedPath)).toString('utf8');
-
-  // Statement für Statement ausführen (wie db_migrate.js) statt als ein
-  // einziges multipleStatements-Query — ein Seed mit zehntausenden Zeilen
-  // als EIN Query überschreitet MySQLs "max_allowed_packet" (in der Praxis
-  // beim ersten echten Test aufgetreten: "Got a packet bigger than
-  // 'max_allowed_packet' bytes"). Einzelne INSERTs bleiben dagegen klein
-  // (export_for_cloudron.sh --seed schreibt bewusst ein Statement pro Zeile).
-  const statements = sql
-    .split('\n')
-    .filter(line => !line.trim().startsWith('--') && line.trim() !== '')
-    .join('\n')
-    .split(/;\s*\n/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  const conn = await db.getConnection();
   try {
-    for (const stmt of statements) {
-      await conn.query(stmt);
-    }
-    const [[{ count: after }]] = await conn.query('SELECT COUNT(*) AS count FROM projects');
-    console.log(`[Seed] Fertig — ${after} Projekte importiert (${statements.length} Statements).`);
+    const statementCount = await importSqlDump(sql);
+    const [[{ count: after }]] = await db.execute('SELECT COUNT(*) AS count FROM projects');
+    console.log(`[Seed] Fertig — ${after} Projekte importiert (${statementCount} Statements).`);
   } catch (e) {
     console.error('[Seed] Import fehlgeschlagen (nicht fatal, App startet trotzdem):', e.message);
-  } finally {
-    conn.release();
   }
 }
 

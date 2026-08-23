@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const AdmZip = require('adm-zip');
 
 module.exports = (ctx) => {
@@ -15,7 +16,8 @@ module.exports = (ctx) => {
     METADATA_DIR,
     TRANSLATIONS_DIR,
     fixRelativeUrls,
-    upload
+    upload,
+    importSqlDump
   } = ctx;
   const router = express.Router();
 
@@ -373,6 +375,16 @@ module.exports = (ctx) => {
   // restore/overwrite server data), and extracted with adm-zip instead of a
   // shelled-out `unzip`/`tar`, with every archive entry checked to resolve
   // inside DATA_DIR before being written (zip-slip protection).
+  //
+  // Also doubles as the import counterpart to GET /admin/export-seed: if the
+  // extracted archive contains a db_seed.sql.gz at its root (that export's
+  // format), its statements are executed against the DB before the sanitize
+  // step below removes the file — same importSqlDump() used by the
+  // first-boot seed in index.js, and upsert-safe (ON DUPLICATE KEY UPDATE)
+  // for every table except glossary_terms, so this works against an
+  // already-populated live instance, not just an empty one. A plain
+  // translations-only backup (no db_seed.sql.gz inside) still restores
+  // exactly as before — this doesn't change that path.
   router.post('/upload-backup', authenticateToken, isAdmin, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -409,6 +421,24 @@ module.exports = (ctx) => {
 
       await fs.remove(filePath);
 
+      // If this is an export-seed archive, import its SQL dump before the
+      // sanitize step below deletes it along with everything else non-.json.
+      // Failure here doesn't abort the request — the file-based restore
+      // (translations, categories) below is independent and should still
+      // complete; the response reports both outcomes separately.
+      let sqlImport = null;
+      const seedDumpPath = path.join(destRoot, 'db_seed.sql.gz');
+      if (await fs.pathExists(seedDumpPath)) {
+        try {
+          const sql = zlib.gunzipSync(await fs.readFile(seedDumpPath)).toString('utf8');
+          const statementCount = await importSqlDump(sql);
+          sqlImport = { success: true, statements: statementCount };
+        } catch (sqlErr) {
+          console.error('Backup SQL import error:', sqlErr.message);
+          sqlImport = { success: false, error: sqlErr.message };
+        }
+      }
+
       // Sanitize extracted content: only .json files are expected, fixed
       // permissions. DATA_DIR itself is a server-side constant (not user
       // input), so this remains injection-safe even though it still shells out.
@@ -431,9 +461,9 @@ module.exports = (ctx) => {
             count += files.filter(f => f.endsWith('.json')).length;
           }
         }
-        res.json({ success: true, message: 'Backup restored, sanitized and synced', count });
+        res.json({ success: true, message: 'Backup restored, sanitized and synced', count, sqlImport });
       } catch (syncErr) {
-        res.json({ success: true, message: 'Backup extracted and sanitized, but auto-sync report failed' });
+        res.json({ success: true, message: 'Backup extracted and sanitized, but auto-sync report failed', sqlImport });
       }
     } catch (error) {
       console.error('Backup upload processing error:', error);
