@@ -14,19 +14,43 @@ const jwt = require('jsonwebtoken');
 const { registerUnsplashRoutes } = require('./unsplash');
 const { runMigrations }          = require('./db_migrate');
 
-// No insecure fallback: a guessable default secret would let anyone forge
-// valid JWTs if the env var is ever missing on a fresh deployment.
-if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set. Refusing to start.');
-  process.exit(1);
-}
-const JWT_SECRET = process.env.JWT_SECRET;
-
 // On Cloudron, only /app/data is writable (read-only filesystem elsewhere);
 // CLOUDRON_DATA_DIR is not an addon-provided var, we just default to it there.
 const DATA_DIR = process.env.CLOUDRON ? '/app/data' : path.join(__dirname, 'data');
 const UPLOADS_DIR = process.env.CLOUDRON ? path.join(DATA_DIR, 'uploads') : path.join(__dirname, 'uploads');
 fs.ensureDirSync(UPLOADS_DIR);
+
+// JWT_SECRET: an explicitly configured env var always wins. Otherwise, unlike
+// the other app secrets (Unsplash keys, help video links), this one needs no
+// external coordination — it's just random bytes nobody else needs to know —
+// so a hard startup failure here was pure friction, not a real safety
+// requirement. Found the hard way: a fresh install from the documented
+// Quickstart (`cloudron install --image ... `) used to crash-loop the Node
+// backend on first boot with "FATAL: JWT_SECRET ... Refusing to start" while
+// Nginx alone kept answering the health check with 200 — Cloudron reported
+// "App is installed", the site loaded, and every /api/* call was dead with
+// no obvious cause. Now it self-generates a secret on first boot and
+// persists it to DATA_DIR (survives restarts/updates, not a reinstall — a
+// reinstall gets a fresh DB too, so old sessions being invalidated along
+// with it is correct, not a bug) — the deployment guide's manual
+// `cloudron env set JWT_SECRET=...` step becomes optional, useful only if
+// someone wants a specific, portable value (e.g. to share one secret across
+// multiple app instances).
+function resolveJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+
+  const secretPath = path.join(DATA_DIR, '.jwt_secret');
+  if (fs.pathExistsSync(secretPath)) {
+    return fs.readFileSync(secretPath, 'utf8').trim();
+  }
+
+  const generated = crypto.randomBytes(48).toString('hex');
+  fs.ensureDirSync(DATA_DIR);
+  fs.writeFileSync(secretPath, generated, { mode: 0o600 });
+  console.log('[Startup] No JWT_SECRET configured — generated and persisted a new one at ' + secretPath);
+  return generated;
+}
+const JWT_SECRET = resolveJwtSecret();
 
 // Restrict the generic upload endpoint (currently used only for
 // POST /api/upload-backup) to archive files and cap its size — an

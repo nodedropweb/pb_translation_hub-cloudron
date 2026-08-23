@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.7] — 2026-08-23
+
+### Fixed
+
+- **A fresh install from the documented Quickstart (`cloudron install --image ...`) silently crash-looped the entire API.** Found while actually testing the fresh-install path end-to-end (uninstall + reinstall d.drupal-tv.de from the 0.4.6 image): the Node backend hard-failed on boot with `FATAL: JWT_SECRET environment variable is not set` — but Nginx, a separate process in the same container, kept answering the Cloudron health check at `/` with 200 regardless, since it serves the static frontend on its own. Cloudron reported "App is installed", the site loaded fine in a browser, and every single `/api/*` call was dead with no obvious cause — the actual required step (`cloudron env set ... JWT_SECRET=...`, documented as step 3 of the Quickstart, easy to skip) was invisible until you went looking at logs. `JWT_SECRET` needs no external coordination unlike the other app secrets (Unsplash keys, help video links) — it's just random bytes nobody else needs to know — so the hard failure was pure friction, not a real safety requirement. The app now self-generates one on first boot and persists it under the data directory if none is configured; an explicitly set env var still always wins. `CLOUDRON_DEPLOYMENT.md`/`.de.md` updated to match — the manual step is now optional, useful only for a portable value shared across instances.
+
 ## [0.4.6] — 2026-08-23
 
 ### Fixed

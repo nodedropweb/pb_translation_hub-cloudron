@@ -50,15 +50,18 @@ domains, add `--domain drupal.de`.
 
 After roughly 26 seconds, the (empty) app is reachable at `https://pb.drupal.de`.
 
-**3. Set the app secrets**
+**3. Set the app secrets (optional)**
+
+The app self-generates a random `JWT_SECRET` on first boot and persists it under its data
+directory if you don't configure one — no manual step required for a working install. Set your
+own only if you specifically need a portable, known value (e.g. to share one secret across
+multiple app instances):
 
 ```bash
 cloudron env set --app pb.drupal.de JWT_SECRET=<your-own-random-value>
 ```
 
-The app runs fine without a custom `JWT_SECRET`, but it then signs login tokens with a fallback
-value visible in the public source — set your own before going live. For Unsplash image search
-and help videos, see the full command in the
+For Unsplash image search and help videos, see the full command in the
 [App secrets section below](#app-secrets-env-values).
 
 **4. Next step depends on the situation**
@@ -193,7 +196,7 @@ config change and needs **no** new image, no rebuild, no `cloudron update`.
 
 | Variable | Purpose | If not set |
 |---|---|---|
-| `JWT_SECRET` | Signs the login tokens for **every** user (auth). The code only checks the signature, never re-checks the role against the database — anyone who knows the value can build themselves a token with `role: admin`. | Falls back to a value visible in the public source — **set this before the app goes live.** |
+| `JWT_SECRET` | Signs the login tokens for **every** user (auth). The code only checks the signature, never re-checks the role against the database — anyone who knows the value can build themselves a token with `role: admin`. | App self-generates a random value on first boot and persists it under the data directory — no action needed. Set your own only for a known, portable value (e.g. shared across instances). |
 | `UNSPLASH_ACCESS_KEY` | Random background image for the theme (`/api/unsplash/random-bg`). | App falls back to a fixed set of background image URLs — cosmetic only, no error. |
 | `HELP_VIDEO_DE` / `HELP_VIDEO_EN` | YouTube tutorial video on the help screen, per language. | Video panel is hidden, no error. |
 | `PB_DEBUG_KEY` | Unlocks two debug endpoints (preview of not-yet-approved translations, sync inspection) — meant for contributors, not end users. | Both endpoints return 403, safely disabled — optional. |

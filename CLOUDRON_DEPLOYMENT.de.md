@@ -53,15 +53,19 @@ konfigurierten Domains, zusätzlich `--domain drupal.de` anhängen.
 
 Nach ca. 26 Sekunden ist die (leere) App unter `https://pb.drupal.de` erreichbar.
 
-**3. App-Secrets setzen**
+**3. App-Secrets setzen (optional)**
+
+Die App generiert beim ersten Start automatisch einen zufälligen `JWT_SECRET` und speichert ihn
+dauerhaft im Datenverzeichnis, falls keiner konfiguriert ist — für eine funktionierende
+Installation ist kein manueller Schritt nötig. Einen eigenen Wert nur setzen, wenn du konkret
+einen portablen, bekannten Wert brauchst (z. B. um ein Secret über mehrere App-Instanzen zu
+teilen):
 
 ```bash
 cloudron env set --app pb.drupal.de JWT_SECRET=<eigener-zufälliger-wert>
 ```
 
-Ohne eigenen `JWT_SECRET` läuft die App zwar, signiert Login-Tokens aber mit einem im öffentlichen
-Quellcode sichtbaren Fallback-Wert — vor dem produktiven Einsatz unbedingt setzen. Für Unsplash-
-Bildsuche und Hilfe-Videos siehe den vollständigen Befehl im
+Für Unsplash-Bildsuche und Hilfe-Videos siehe den vollständigen Befehl im
 [Abschnitt „App-Secrets" unten](#app-secrets-env-werte).
 
 **4. Weiter je nach Fall**
@@ -204,19 +208,13 @@ das ist ein reiner Konfigurationswechsel und braucht **kein** neues Image, keine
 
 | Variable | Zweck | Wenn nicht gesetzt |
 |---|---|---|
-| `JWT_SECRET` | Signiert die Login-Tokens **aller** Nutzer (Auth). Der Code prüft nur die Signatur, nicht nochmal die Rolle in der DB — wer den Wert kennt, kann sich ein Token mit `role: admin` selbst bauen. | Fällt auf einen im öffentlichen Quellcode sichtbaren Wert zurück — **unbedingt setzen**, bevor die App produktiv genutzt wird. |
+| `JWT_SECRET` | Signiert die Login-Tokens **aller** Nutzer (Auth). Der Code prüft nur die Signatur, nicht nochmal die Rolle in der DB — wer den Wert kennt, kann sich ein Token mit `role: admin` selbst bauen. | App generiert beim ersten Start automatisch einen zufälligen Wert und speichert ihn im Datenverzeichnis — kein Handlungsbedarf. Eigenen Wert nur für einen bekannten, portablen Wert setzen (z. B. über mehrere Instanzen geteilt). |
 | `UNSPLASH_ACCESS_KEY` | Zufälliges Hintergrundbild fürs Theme (`/api/unsplash/random-bg`). | App fällt automatisch auf fest hinterlegte Bild-URLs zurück — rein kosmetisch, kein Fehler. |
 | `HELP_VIDEO_DE` / `HELP_VIDEO_EN` | YouTube-Tutorial-Video auf der Hilfeseite, je Sprache. | Video-Panel wird ausgeblendet, kein Fehler. |
 | `PB_DEBUG_KEY` | Schaltet zwei Debug-Endpunkte frei (Vorschau auf noch nicht freigegebene Übersetzungen, Sync-Inspektion) — für Mitwirkende, nicht für Endnutzer gedacht. | Beide Endpunkte antworten mit 403, sicher deaktiviert — optional. |
 
 `UNSPLASH_APP_ID` und `UNSPLASH_SECRET_KEY` (in `server/.env.example` gelistet) werden im Code
 aktuell **nicht** verwendet und müssen nicht gesetzt werden.
-
-> **Wichtig — `JWT_SECRET` wirklich setzen.** Der Code hat einen Fallback-Wert, falls
-> `JWT_SECRET` fehlt, und der steht wortwörtlich im öffentlichen Quellcode
-> (`server/index.js`). Bleibt er unverändert, kann jeder, der den Quellcode kennt, gültige
-> Login-Tokens fälschen. **Vor dem produktiven Einsatz unbedingt einen eigenen, zufälligen Wert
-> setzen.**
 
 Welche Variablen es gibt und wofür sie sind, steht in `server/.env.example` im Repo. Die
 tatsächlichen Werte (Unsplash-Zugangsdaten etc.) bekommst du — wie den Datenexport aus
