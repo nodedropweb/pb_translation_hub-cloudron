@@ -9,6 +9,13 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.13] — 2026-08-23
+
+### Behoben
+
+- **Der Import fügte still gar nichts ein, meldete aber 200 OK.** Live bestätigt: Der Upload eines echten Exports ergab "keine Projekte gefunden", obwohl der Restore Erfolg meldete. `projects.semver_min`/`semver_max` sind `GENERATED ALWAYS ... STORED`-Spalten (siehe `migrations/008_semver_columns.sql`), berechnet aus `data` — MySQL lehnt jedes `INSERT` ab, das überhaupt einen Wert dafür angibt, mit `The value specified for generated column 'semver_min' in table 'projects' is not allowed`. Der Export nahm über `SELECT *` deren aktuelle Werte wie jede andere Spalte mit und fügte sie wieder ein, was die allererste `projects`-Zeile bei jedem Import zum Absturz brachte — und da `importSqlDump()` beim ersten fehlschlagenden Statement abbricht, bedeutete das null importierte Zeilen in jeder Tabelle, still, obwohl die Anfrage selbst weiterhin 200 zurückgab (der Fehler stand im `sqlImport.success: false` der Antwort, nur leicht zu übersehen). Der Export fragt jetzt pro Tabelle `information_schema.COLUMNS` nach tatsächlich generierten Spalten ab und schließt sie vom `INSERT` aus, statt einer hartkodierten Ausschlussliste — jede künftige generierte Spalte wird automatisch berücksichtigt.
+- **Ein fehlgeschlagener SQL-Import zeigte sich als grüne Erfolgs-Toast.** Die Fehlermeldung stand in Klammern angehängt an eine ansonsten grüne "Backup wiederhergestellt"-Snackbar — technisch vorhanden, leicht zu überlesen. Zeigt jetzt rot an, sobald `sqlImport.success` `false` ist.
+
 ## [0.4.12] — 2026-08-23
 
 ### Behoben

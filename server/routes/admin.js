@@ -207,9 +207,28 @@ module.exports = (ctx) => {
 
       conn = await db.getConnection();
       for (const table of SEED_TABLES) {
+        // Generated columns (e.g. projects.semver_min/semver_max, computed
+        // from `data` — see migrations/008_semver_columns.sql) can never
+        // appear in an INSERT; MySQL rejects the whole statement with
+        // "The value specified for generated column '...' is not allowed"
+        // if they do. `SELECT *` includes their current values like any
+        // other column, so blindly re-inserting every selected column broke
+        // the very first `projects` row on every import — confirmed live,
+        // it silently zeroed out the whole import (importSqlDump aborts on
+        // the first failing statement) even though the request itself
+        // returned 200. Queried per table via information_schema instead of
+        // a hardcoded exclusion list, so any future generated column is
+        // handled automatically without needing to remember to update this.
+        const [genColRows] = await db.execute(
+          `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND GENERATION_EXPRESSION != ''`,
+          [table]
+        );
+        const generatedColumns = new Set(genColRows.map((r) => r.COLUMN_NAME));
+
         const rowStream = conn.connection.query(`SELECT * FROM \`${table}\``).stream();
         for await (const row of rowStream) {
-          const columns = Object.keys(row);
+          const columns = Object.keys(row).filter((c) => !generatedColumns.has(c));
           const values = columns.map((col) => db.escape(row[col]));
           const columnList = columns.map((c) => `\`${c}\``).join(',');
           let stmt = `INSERT INTO \`${table}\` (${columnList}) VALUES (${values.join(',')})`;

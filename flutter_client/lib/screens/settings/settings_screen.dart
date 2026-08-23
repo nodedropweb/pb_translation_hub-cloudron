@@ -292,6 +292,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // before. Not localized, same as the export failure detail below —
       // this is diagnostic admin-only text, not part of the translated UI.
       final sqlImport = response.data['sqlImport'];
+      // The file restore (count) and the SQL import are reported
+      // independently — a green toast used to show even when sqlImport
+      // failed outright, with the failure buried in parentheses inside an
+      // otherwise "successful" message. Track it separately so a failed SQL
+      // import shows as the error it is, not a footnote on a success toast.
+      var sqlImportFailed = false;
       var message = l10n.settingsBackupSuccess(count.toString());
       if (sqlImport is Map && sqlImport['success'] == true) {
         message += ' + ${sqlImport['statements']} SQL statements imported';
@@ -301,13 +307,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           message += ' (file resync failed: ${sqlImport['regenerationError']})';
         }
       } else if (sqlImport is Map && sqlImport['success'] == false) {
-        message += ' (SQL import failed: ${sqlImport['error']})';
+        sqlImportFailed = true;
+        message += ' — but SQL import failed: ${sqlImport['error']}';
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
-            backgroundColor: const Color(0xFF2E7D32),
+            backgroundColor: sqlImportFailed ? Colors.redAccent : const Color(0xFF2E7D32),
           ),
         );
       }

@@ -9,6 +9,13 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.13] — 2026-08-23
+
+### Fixed
+
+- **Import silently inserted nothing at all, while reporting 200 OK.** Confirmed live: uploading a real export produced "no projects found" after the restore claimed success. `projects.semver_min`/`semver_max` are `GENERATED ALWAYS ... STORED` columns (see `migrations/008_semver_columns.sql`) computed from `data` — MySQL rejects any `INSERT` that specifies a value for them at all, with `The value specified for generated column 'semver_min' in table 'projects' is not allowed`. The export's `SELECT *` picked up their current values like any other column and re-inserted them, which killed the very first `projects` row on every import — and since `importSqlDump()` aborts on the first failing statement, that meant zero rows imported into any table, silently, even though the request itself still returned 200 (the failure was captured in the response's `sqlImport.success: false`, just easy to miss). Export now queries `information_schema.COLUMNS` per table for actual generated columns and excludes them from the `INSERT`, rather than a hardcoded exclusion list — any future generated column is handled automatically.
+- **A failed SQL import showed as a green success toast.** The failure message was appended in parentheses to an otherwise-green "Backup restored" snackbar — technically present, easy to read past. It now shows red whenever `sqlImport.success` is `false`.
+
 ## [0.4.12] — 2026-08-23
 
 ### Fixed
