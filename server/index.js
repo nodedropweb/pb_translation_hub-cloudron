@@ -700,10 +700,20 @@ app.use((err, req, res, next) => {
 // untouched. translation JSON files are NOT part of the seed — they're
 // already regenerated from the now-populated `translations` table by
 // ensureTranslationFilesFromDb() below, so nothing extra is needed for that.
-// Executes a gzipped `.sql` dump statement-by-statement (like db_migrate.js)
-// rather than as one multipleStatements query — a seed with tens of
-// thousands of lines as a single query exceeds MySQL's `max_allowed_packet`
-// (hit in practice: "Got a packet bigger than 'max_allowed_packet' bytes").
+// Executes a gzipped `.sql` dump in batches of BATCH_SIZE statements per
+// round trip, via a dedicated multipleStatements connection — not one giant
+// multipleStatements query for the whole file (exceeds MySQL's
+// `max_allowed_packet`: "Got a packet bigger than 'max_allowed_packet'
+// bytes", hit in practice), and not one round trip per statement either
+// (confirmed live on the real dataset — 41k+ projects, tens of thousands of
+// statements total — sequential one-by-one execution took long enough to
+// exceed nginx's default 60s `proxy_read_timeout`: "upstream timed out ...
+// while reading response header"). Batching keeps each round trip's payload
+// small while cutting the round-trip *count* by ~BATCH_SIZE, which is what
+// actually dominates wall-clock time here. The dedicated connection (instead
+// of enabling multipleStatements on the shared pool) keeps that flag away
+// from every other query in the app — safe here specifically because every
+// statement comes from our own trusted export format, never user input.
 // Individual INSERTs stay small since both export producers
 // (export_for_cloudron.sh --seed and GET /api/admin/export-seed)
 // deliberately write one statement per line. Shared by the first-boot seed
@@ -713,34 +723,44 @@ app.use((err, req, res, next) => {
 // that's fatal for them.
 //
 // Takes a file path, not a pre-read string, and streams it line by line via
-// readline instead — an earlier version took the fully decompressed SQL text
-// as one JS string and ran several whole-string .split()/.join() passes over
-// it to find statement boundaries. On the real dataset (tens of thousands of
-// rows, `projects.data` alone holding a full JSON blob per row) those
-// intermediate copies and giant arrays of substrings OOM-crashed the whole
-// process mid-request — confirmed live: "FATAL ERROR: Reached heap limit...
-// JavaScript heap out of memory" with `Runtime_StringSplit` at the top of the
-// stack. Same class of bug as the 0.4.1 export OOM fix, now applied to the
-// matching import path; peak memory now stays roughly constant regardless of
-// file size.
+// readline — an earlier version took the fully decompressed SQL text as one
+// JS string and ran several whole-string .split()/.join() passes over it to
+// find statement boundaries. On the real dataset (`projects.data` alone
+// holding a full JSON blob per row) those intermediate copies and giant
+// arrays of substrings OOM-crashed the whole process mid-request — confirmed
+// live: "FATAL ERROR: Reached heap limit... JavaScript heap out of memory"
+// with `Runtime_StringSplit` at the top of the stack. Same class of bug as
+// the 0.4.1 export OOM fix, now applied to the matching import path; peak
+// memory stays roughly constant regardless of file size.
 async function importSqlDump(sqlGzPath) {
+  const BATCH_SIZE = 300;
   const lineStream = fs.createReadStream(sqlGzPath).pipe(zlib.createGunzip());
   const rl = readline.createInterface({ input: lineStream, crlfDelay: Infinity });
 
-  const conn = await db.getConnection();
+  const conn = await mysql.createConnection({ ...dbConfig, multipleStatements: true });
+  let batch = [];
   let count = 0;
+
+  const flush = async () => {
+    if (batch.length === 0) return;
+    await conn.query(batch.join('\n'));
+    count += batch.length;
+    batch = [];
+  };
+
   try {
     for await (const rawLine of rl) {
       const line = rawLine.trim();
       if (!line || line.startsWith('--')) continue;
       // Each line is already exactly one complete statement (see the
-      // producers named above), terminated by ';'.
-      const stmt = line.endsWith(';') ? line.slice(0, -1) : line;
-      await conn.query(stmt);
-      count++;
+      // producers named above), terminated by ';' — kept as-is here, since
+      // multipleStatements needs that terminator between batched statements.
+      batch.push(line);
+      if (batch.length >= BATCH_SIZE) await flush();
     }
+    await flush();
   } finally {
-    conn.release();
+    await conn.end();
   }
   return count;
 }

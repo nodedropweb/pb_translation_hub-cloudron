@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.15] — 2026-08-23
+
+### Behoben
+
+- **Der Import eines echten Datensatzes (41k+ Projekte) lief selbst nach allen vorherigen Fixes ins Timeout.** Live bestätigt gegen einen korrekten, vollständigen Recovery-Dump aus der echten Produktions-DB: `504`, nginx-Log `upstream timed out (110: Connection timed out) while reading response header from upstream`. `importSqlDump()` führte ein Statement pro Roundtrip aus — zehntausende davon beim echten Datensatz — deutlich über nginx' Standard-`proxy_read_timeout` von 60 s, der für `/api/` nie explizit gesetzt war. Umgeschrieben, um Statements in Batches (300 pro Roundtrip) über eine dedizierte `multipleStatements`-Verbindung statt des gemeinsamen Pools auszuführen (isoliert von jeder anderen Query in der App gehalten — hier sicher, weil die Statements aus dem eigenen, vertrauenswürdigen Export-Format stammen, nie aus Nutzereingaben), was die Roundtrip-Anzahl um ~300x reduziert. Zusätzlich `proxy_read_timeout`/`proxy_send_timeout` explizit auf 600 s für `/api/` angehoben als zweite Verteidigungslinie.
+
 ## [0.4.14] — 2026-08-23
 
 ### Behoben
