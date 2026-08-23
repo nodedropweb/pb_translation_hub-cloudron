@@ -7,6 +7,7 @@ const bodyParser = require('body-parser');
 const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const mysql = require('mysql2/promise');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -105,12 +106,15 @@ const isReviewerOrAdmin = (req, res, next) => {
 
 // On Cloudron, the mysql addon injects CLOUDRON_MYSQL_*; falls back to the
 // docker-compose DB_* vars for local dev and the drupaltutorials.de deploy.
-const db = mysql.createPool({
+const dbConfig = {
   host: process.env.CLOUDRON_MYSQL_HOST || process.env.DB_HOST || '127.0.0.1',
   port: process.env.CLOUDRON_MYSQL_PORT || process.env.DB_PORT || 3306,
   user: process.env.CLOUDRON_MYSQL_USERNAME || process.env.DB_USER || 'pb_hub',
   password: process.env.CLOUDRON_MYSQL_PASSWORD || process.env.DB_PASSWORD,
   database: process.env.CLOUDRON_MYSQL_DATABASE || process.env.DB_NAME || 'pb_translation_hub',
+};
+const db = mysql.createPool({
+  ...dbConfig,
   // mysql2 returns DECIMAL columns (e.g. SUM(CASE WHEN ... THEN 1 ELSE 0 END))
   // as strings by default to avoid precision loss. The Flutter client's
   // FilterCounts model expects real ints, so a string there throws during
@@ -642,6 +646,73 @@ app.use((err, req, res, next) => {
   res.status(400).json({ error: err.message || 'Request failed' });
 });
 
+// ── Startup: optional first-boot data seed ─────────────────────────────────────
+//
+// Opt-in only (SEED_ON_FIRST_BOOT=true) and only runs against a database that
+// still looks empty (projects has 0 rows) — never touches an already-populated
+// instance, so it's safe to leave the env var set permanently across restarts.
+//
+// The seed file (server/seed/db_seed.sql.gz, if present in the image) is
+// produced by pb_translation_hub/export_for_cloudron.sh --seed and contains
+// content tables only (projects, translations, glossary_terms,
+// priority_projects, ignored_projects, sync_events, site_settings) — no
+// users or schema_migrations, so a seeded instance still gets its own fresh
+// admin account via normal registration, and the migration runner's own
+// bookkeeping (already run right before this, see app.listen below) is
+// untouched. translation JSON files are NOT part of the seed — they're
+// already regenerated from the now-populated `translations` table by
+// ensureTranslationFilesFromDb() below, so nothing extra is needed for that.
+async function seedFromBundledDataIfRequested() {
+  if (process.env.SEED_ON_FIRST_BOOT !== 'true') return;
+
+  const seedPath = path.join(__dirname, 'seed', 'db_seed.sql.gz');
+  try {
+    const [[{ count }]] = await db.execute('SELECT COUNT(*) AS count FROM projects');
+    if (count > 0) {
+      console.log(`[Seed] projects enthält bereits ${count} Zeile(n) — überspringe Seed-Import.`);
+      return;
+    }
+  } catch (e) {
+    console.error('[Seed] Konnte projects nicht prüfen — überspringe Seed-Import:', e.message);
+    return;
+  }
+
+  if (!(await fs.pathExists(seedPath))) {
+    console.warn(`[Seed] SEED_ON_FIRST_BOOT=true, aber kein gebackenes Seed-Paket unter ${seedPath} gefunden.`);
+    return;
+  }
+
+  console.log('[Seed] Importiere gebackenes Seed-Paket …');
+  const sql = zlib.gunzipSync(await fs.readFile(seedPath)).toString('utf8');
+
+  // Statement für Statement ausführen (wie db_migrate.js) statt als ein
+  // einziges multipleStatements-Query — ein Seed mit zehntausenden Zeilen
+  // als EIN Query überschreitet MySQLs "max_allowed_packet" (in der Praxis
+  // beim ersten echten Test aufgetreten: "Got a packet bigger than
+  // 'max_allowed_packet' bytes"). Einzelne INSERTs bleiben dagegen klein
+  // (export_for_cloudron.sh --seed schreibt bewusst ein Statement pro Zeile).
+  const statements = sql
+    .split('\n')
+    .filter(line => !line.trim().startsWith('--') && line.trim() !== '')
+    .join('\n')
+    .split(/;\s*\n/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  const conn = await db.getConnection();
+  try {
+    for (const stmt of statements) {
+      await conn.query(stmt);
+    }
+    const [[{ count: after }]] = await conn.query('SELECT COUNT(*) AS count FROM projects');
+    console.log(`[Seed] Fertig — ${after} Projekte importiert (${statements.length} Statements).`);
+  } catch (e) {
+    console.error('[Seed] Import fehlgeschlagen (nicht fatal, App startet trotzdem):', e.message);
+  } finally {
+    conn.release();
+  }
+}
+
 // ── Startup: ensure translation files exist on the filesystem ─────────────────
 //
 // Two passes run sequentially at startup (both idempotent / non-fatal):
@@ -796,6 +867,11 @@ app.listen(PORT, async () => {
     console.error('[Startup] KRITISCH: DB-Migration fehlgeschlagen:', e.message);
     process.exit(1); // Hard fail — Server darf nicht mit falschem Schema laufen
   }
+
+  // Optional first-boot seed (opt-in, no-op unless SEED_ON_FIRST_BOOT=true and
+  // the DB is still empty) — must run before ensureTranslationFilesFromDb() so
+  // that regeneration below sees the freshly-seeded `translations` table.
+  await seedFromBundledDataIfRequested();
 
   // Run startup tasks sequentially so backfill sees freshly generated files.
   await ensureTranslationFilesFromDb();

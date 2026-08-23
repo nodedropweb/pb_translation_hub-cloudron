@@ -20,6 +20,12 @@ RUN cd /app/code/server && npm install --production
 
 COPY server /app/code/server
 
+# Optionaler First-Boot-Seed (server/seed/db_seed.sql.gz) — nur vorhanden, wenn
+# vor dem Build ../pb_translation_hub/export_for_cloudron.sh --seed
+# server/seed/db_seed.sql.gz gelaufen ist. Ohne diese Datei ist SEED_ON_FIRST_
+# BOOT ein No-op (siehe server/index.js), das Image bleibt also auch ohne
+# Seed baubar — server/seed/.gitkeep hält das Verzeichnis für COPY vorhanden.
+
 # Flutter-Web-Build als Nginx-Docroot
 COPY --from=flutter-build /app/build/web /app/code/web
 

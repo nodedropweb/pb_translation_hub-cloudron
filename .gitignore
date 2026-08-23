@@ -35,6 +35,11 @@ server/data/*.sql.gz
 server/uploads/
 data.zip
 
+# First-Boot-Seed-Dump — wird lokal per export_for_cloudron.sh --seed erzeugt,
+# nicht committen (Live-Content-Snapshot, kein Quellcode). .gitkeep bleibt,
+# damit das Verzeichnis für den Docker-Build immer vorhanden ist.
+server/seed/*.sql.gz
+
 # Logs and PIDs
 server/*.log
 flutter_client/*.log

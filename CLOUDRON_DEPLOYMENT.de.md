@@ -231,23 +231,39 @@ Eine frische Installation hat eine **leere** Datenbank und keine Übersetzungsda
 bestehendes Deployment übernimmst (z. B. beim Umzug vom Docker-Compose-Setup), importiere dessen
 Daten einmalig direkt nach der Installation.
 
-**Woher bekomme ich den Datenexport?** Du bekommst dafür kein Skript, sondern ein fertiges Archiv
-(DB-Dump + `metadata`/`translations`/`status.json`/`uploads`) vom bisherigen Betreiber des
-Produktiv-Deployments — frag beim aktuellen Maintainer nach, der stellt dir einen aktuellen Export
-über einen privaten Kanal (nicht öffentlich verlinkt) bereit. Der Dump aus einem laufenden
-MariaDB-Deployment ist normalerweise **nicht** unverändert MySQL-8-kompatibel — bitte explizit
-nachfragen, ob der Export bereits für MySQL 8 angepasst wurde (siehe
-[Abschnitt 4](#4-mariadb--mysql-8-kompatibilitätshinweise)), das erspart dir die manuellen Fixes.
+**Woher bekomme ich den Datenexport?** Das Hauptrepo (`pb_translation_hub`) bringt dafür
+`export_for_cloudron.sh` mit — es zieht einen frischen Dump direkt aus dem laufenden
+MariaDB-Deployment und wendet dabei schon beide Fixes aus
+[Abschnitt 4](#4-mariadb--mysql-8-kompatibilitätshinweise) an (Collation-Ersetzung +
+Strip/Re-Add der generierten Spalten) — keine manuelle SQL-Chirurgie nötig:
+
+```bash
+# aus pb_translation_hub/ heraus
+./export_for_cloudron.sh                       # schreibt exports/pb_hub_cloudron_<stamp>.sql.gz
+./export_for_cloudron.sh --import-to <subdomain> [--yes]   # importiert auch direkt (siehe 3a)
+```
+
+Es fasst nur Übersetzungs-/DB-Daten an — `metadata`/`status.json`/`uploads` (Abschnitt 3b) müssen
+weiterhin manuell kopiert werden. Bekommst du stattdessen einen anders erzeugten Export (z. B.
+einen rohen `mysqldump`), explizit nachfragen, ob er bereits MySQL-8-angepasst ist — falls nicht,
+gelten die Fixes aus Abschnitt 4.
 
 ### 3a. Datenbank
 
-Die von Cloudron in den Container injizierten MySQL-Addon-Zugangsdaten abrufen:
+**Empfohlen — per Skript:** `./export_for_cloudron.sh --import-to <subdomain>` legt zuerst per
+`cloudron backup create` ein Sicherheits-Backup der Ziel-App an und spielt den transformierten
+Dump danach direkt in deren MySQL-Addon ein. `--yes` überspringt die Sicherheitsabfrage für den
+nicht-interaktiven Einsatz — nur setzen, wenn das wirklich gewollt ist, sonst greift die
+interaktive Nachfrage als Sicherheitsnetz.
+
+**Manuelle Alternative:** die von Cloudron in den Container injizierten MySQL-Addon-Zugangsdaten
+abrufen:
 
 ```bash
 cloudron exec --app <subdomain> -- env | grep CLOUDRON_MYSQL
 ```
 
-Einen Dump importieren (siehe die
+Einen bereits transformierten Dump importieren (siehe die
 [MariaDB-→-MySQL-Kompatibilitätshinweise](#4-mariadb--mysql-8-kompatibilitätshinweise) unten —
 ein Dump direkt aus dem ursprünglichen MariaDB-Deployment lässt sich **nicht** unverändert
 importieren):
@@ -319,23 +335,33 @@ Die Zahlen sollten ungleich null sein und zum Ausgangs-Deployment passen.
 
 Das ursprüngliche Deployment läuft auf **MariaDB 11.8**; Cloudrons MySQL-Addon ist
 **MySQL 8.0.31**. Ein roher `mysqldump` von der MariaDB-Seite lässt sich nicht unverändert
-importieren. Zwei konkrete Inkompatibilitäten wurden gefunden und müssen im Dump vor dem Import
-gepatcht werden (beide sind bereits in den `server/migrations/*.sql` dieses Repos gefixt, die auf
-einer frischen/leeren Datenbank automatisch greifen — ein **wiederhergestellter Dump** umgeht den
-Migrations-Runner aber und braucht dieselben Fixes direkt an der SQL-Datei):
+importieren. `pb_translation_hub/export_for_cloudron.sh` automatisiert beide Fixes unten
+(End-to-End gegen einen echten MySQL-8-Container verifiziert — voller Datensatz, alle Tabellen,
+Apostrophe/Mehrbyte-Inhalte kommen unversehrt an); dieser Abschnitt dokumentiert, was es tut, für
+alle, die einen Dump stattdessen von Hand patchen:
 
-1. **Collation** `utf8mb4_uca1400_ai_ci` (nur MariaDB) → im gesamten Dump ersetzen durch
-   `utf8mb4_0900_ai_ci` (MySQL 8s natives Äquivalent) oder `utf8mb4_unicode_ci` (portabel, wird
-   von den Migrationen dieses Repos selbst genutzt).
+1. **Collation** `utf8mb4_uca1400_ai_ci` (nur MariaDB) → wird ersetzt durch `utf8mb4_unicode_ci`
+   (portabel, wird von den Migrationen dieses Repos selbst und von `glossary_terms` genutzt, was
+   Mixed-Collation-Join-Fehler gegen über den normalen Migrationsweg angelegte Tabellen vermeidet)
+   im gesamten Dump. `utf8mb4_0900_ai_ci` (MySQL 8s natives Standard-Collation) funktioniert beim
+   manuellen Patchen genauso.
 2. **Generierte Spalten** (`projects.semver_min` / `semver_max`,
-   `STORED GENERATED ALWAYS AS`): `mysqldump` schreibt deren berechnete Werte direkt in die
-   `INSERT`-Statements. MariaDB toleriert das; MySQL 8 wirft
+   `STORED GENERATED ALWAYS AS`): `mysqldump`/`mariadb-dump` schreibt deren berechnete Werte
+   direkt in die `INSERT`-Statements. MariaDB toleriert das; MySQL 8 wirft
    `ER_GENERATED_COLUMN_NOT_ALLOWED` (Fehler 3105), weil es einen expliziten Wert für eine
-   generierte Spalte strikt verbietet. Fix: `semver_min`/`semver_max` aus dem
-   `CREATE TABLE projects`-Statement und aus den `INSERT`-Werten jeder Zeile entfernen, dann
-   beide Spalten **nach** dem Laden der Daten per
-   `ALTER TABLE projects ADD COLUMN ... GENERATED ALWAYS AS (...) STORED` wieder hinzufügen —
-   MySQL berechnet die Werte an diesem Punkt selbst, keine expliziten Werte nötig.
+   generierte Spalte strikt verbietet. Fix: `projects` *ohne* `semver_min`/`semver_max` anlegen,
+   die Daten per `INSERT`s laden, die nur die echten Spalten benennen, dann beide Spalten **nach**
+   dem Laden der Daten per `ALTER TABLE projects ADD COLUMN ... GENERATED ALWAYS AS (...) STORED`
+   hinzufügen — MySQL berechnet die Werte an diesem Punkt selbst.
+   (Eine von `mysqldump` erzeugte mehrzeilige `INSERT`-Anweisung textuell zu kürzen ist gegen
+   JSON-Inhalte mit Kommas/Anführungszeichen fragil; das Skript erzeugt die `projects`-Zeilen
+   stattdessen selbst per `SELECT ... QUOTE(...)` und umgeht das Problem ganz.)
+   - **Falle, falls man das selbst baut:** Erzeugt man diese `INSERT`s per `mysql -B`
+     (Batch-Modus), werden sie doppelt escaped — der Batch-Modus wendet sein eigenes
+     TSV-artiges Backslash-Escaping zusätzlich zu `QUOTE()`s bereits korrektem SQL-Escaping an,
+     was jeden Wert mit echtem Backslash zerstört (z. B. JSON-Text mit eingebettetem `\r\n`) und
+     beim Import mit `Unknown command '\\'` fehlschlägt. `-r`/`--raw` unterdrückt das erneute
+     Escaping des Batch-Modus.
 
 Startest du stattdessen von einer **leeren** Datenbank, betrifft dich das alles nicht — die
 mitgelieferten Migrationen in `server/migrations/` sind bereits MySQL-8-sicher und laufen
@@ -444,6 +470,35 @@ docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 Der Flutter-Web-Build-Schritt innerhalb von `docker build` dauert mehrere Minuten — dieselben
 Kosten, die in [Abschnitt 2](#2-die-app-installieren) für eine Quellcode-Installation beschrieben
 sind, hier aber nur einmal statt auf jedem Cloudron-Server jedes Admins.
+
+### 7a. Einen Daten-Seed ins Image backen (optional)
+
+Eine frische Installation hat normalerweise eine leere Datenbank — siehe
+[Abschnitt 3](#3-nach-der-installation-bestehende-daten-importieren) für den manuellen
+Post-Install-Import. Alternativ kann sich das Image beim ersten Start selbst befüllen, sodass eine
+frische Installation den kompletten Übersetzungs-Korpus schon ohne manuellen Schritt mitbringt:
+
+```bash
+# aus pb_translation_hub/ (Hauptrepo) heraus, vor docker build:
+./export_for_cloudron.sh --seed ../pb_translation_hub-cloudron/server/seed/db_seed.sql.gz
+```
+
+Danach `docker build` wie oben — `server/seed/` liegt bereits im Build-Kontext und wird automatisch
+mit ins Image gebacken (kein eigenes `COPY` nötig, es liegt schon unter `server/`). Fehlt die
+Datei, baut das Image trotzdem problemlos — Seeding ist dann zur Laufzeit einfach ein No-op.
+
+Der Seed enthält **nur Inhalts-Daten** — `projects`, `translations`, `glossary_terms`,
+`priority_projects`, `ignored_projects`, `sync_events`, `site_settings`. Bewusst ausgeschlossen:
+`users` (damit eine geseedete Instanz per normaler Registrierung ihren eigenen frischen
+Admin-Account bekommt, nicht deinen echten Passwort-Hash) und `schema_migrations` (damit die
+Buchführung des Migrationsrunners unangetastet bleibt). Übersetzungs-JSON-Dateien sind ebenfalls
+nicht Teil des Seeds — die bestehende Startup-Logik (`ensureTranslationFilesFromDb()`) erzeugt sie
+ohnehin automatisch aus der `translations`-Tabelle, sobald das Übersetzungsverzeichnis leer ist.
+
+Das Seeding selbst läuft nur, wenn explizit angefordert — `SEED_ON_FIRST_BOOT=true` auf der App
+setzen (Cloudron-Dashboard → App → Environment Variables, oder `cloudron env set`). Es prüft vorher,
+ob `projects` noch leer ist, ist also unbedenklich dauerhaft gesetzt zu lassen: es rührt eine bereits
+befüllte Datenbank bei keinem späteren Neustart oder Update an.
 
 Nach dem Push zieht jeder, der `cloudron update --app <subdomain> --image
 ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0` ausführt (siehe

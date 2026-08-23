@@ -9,7 +9,19 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
-## [Unreleased]
+## [0.4.0] — 2026-08-23
+
+### Added
+
+- **Optional first-boot data seed.** Set `SEED_ON_FIRST_BOOT=true` on the app and a bundled content snapshot (`server/seed/db_seed.sql.gz`, produced by `pb_translation_hub/export_for_cloudron.sh --seed`) is imported automatically once the schema migrations have run, as long as `projects` is still empty — a fresh install can come with the full translation corpus already in place, no manual `cloudron push`/DB import needed. Only content tables are seeded (`projects`, `translations`, `glossary_terms`, `priority_projects`, `ignored_projects`, `sync_events`, `site_settings`) — `users` and `schema_migrations` are excluded, so a seeded instance still gets its own fresh admin account via normal registration and the migration bookkeeping stays untouched. Translation JSON files aren't part of the seed either — the existing startup regeneration (`ensureTranslationFilesFromDb()`) rebuilds them from the now-populated `translations` table automatically. Never touches an already-populated database, so the env var is safe to leave set permanently across restarts/updates. Verified end-to-end: real migrations against an empty MySQL 8 database, then a live `index.js` run with `SEED_ON_FIRST_BOOT=true` against it — seed imports correctly, a second boot correctly skips it, and translation files regenerate with real content intact.
+- **Admin-UI data export ("Export Data Snapshot" on Settings).** `GET /api/admin/export-seed` builds a content-only, gzipped SQL dump of the same tables as the first-boot seed above, directly from the already-open `mysql2` connection (no `mariadb-dump`/`mysqldump` binary needed, so it works regardless of what a given deployment target ships) — an admin can download it straight from the browser and drop it in as `server/seed/db_seed.sql.gz` for the next image build, no SSH or shell access to any server required.
+
+### Fixed
+
+- **Fresh installs against MySQL 8 were broken** — found while building the first-boot seed above and testing it against a genuinely empty database for the first time (all prior testing had been against an already-provisioned app):
+  - Three migrations used `ADD COLUMN IF NOT EXISTS`, MariaDB-only syntax that MySQL 8 rejects with a parse error, hard-failing server startup on any fresh install.
+  - `translation_suggestions` and `projects.changed` were never created by any migration — both only ever existed on the live server, added outside the migration system at some point. A fresh install failed the moment either was touched.
+  - See the `pb_translation_hub` changelog for the exact migration files fixed; the fixes were ported here since this repo's migrations are the same files.
 
 ## [2.4.0] — 2026-08-22
 

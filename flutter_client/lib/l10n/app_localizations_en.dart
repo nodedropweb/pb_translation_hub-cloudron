@@ -1451,6 +1451,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsUploading => 'Uploading...';
 
   @override
+  String get settingsExportSeed => 'Export Data Snapshot';
+
+  @override
+  String get settingsExportSeedDescription =>
+      'Downloads a snapshot of all translations and projects as .sql.gz — drop it in as server/seed/db_seed.sql.gz for the next Cloudron image build.';
+
+  @override
+  String get settingsExportSeedButton => 'Download Snapshot';
+
+  @override
+  String get settingsExporting => 'Exporting...';
+
+  @override
+  String get settingsExportSeedSuccess => 'Export downloaded successfully.';
+
+  @override
+  String get settingsExportSeedFailed => 'Export failed.';
+
+  @override
   String get settingsErrorDiagnostics => 'Error Diagnostics & System Logs';
 
   @override

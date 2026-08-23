@@ -1,4 +1,14 @@
 const express = require('express');
+const zlib = require('zlib');
+
+// Content tables included in a seed export — mirrors export_for_cloudron.sh
+// --seed / seedFromBundledDataIfRequested() in index.js. Deliberately excludes
+// `users` and `schema_migrations`: a seeded instance gets its own fresh admin
+// account via normal registration, and migration bookkeeping stays untouched.
+const SEED_TABLES = [
+  'projects', 'translations', 'glossary_terms',
+  'priority_projects', 'ignored_projects', 'sync_events', 'site_settings',
+];
 
 module.exports = (ctx) => {
   const { db, authenticateToken, isAdmin } = ctx;
@@ -92,6 +102,41 @@ module.exports = (ctx) => {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Export a content-only snapshot of the current DB as a gzipped SQL dump —
+  // same tables/statement format the first-boot seed importer expects
+  // (server/index.js: seedFromBundledDataIfRequested()), so the downloaded
+  // file can be dropped straight in as server/seed/db_seed.sql.gz before the
+  // next Cloudron image build. Built entirely from the already-open mysql2
+  // pool (no mariadb-dump/mysqldump binary involved), so it works regardless
+  // of what client tools a given deployment target ships.
+  router.get('/admin/export-seed', authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const lines = ['SET NAMES utf8mb4;'];
+      for (const table of SEED_TABLES) {
+        const [rows] = await db.query(`SELECT * FROM \`${table}\``);
+        for (const row of rows) {
+          const columns = Object.keys(row);
+          const values = columns.map((col) => db.escape(row[col]));
+          lines.push(
+            `INSERT INTO \`${table}\` (${columns.map((c) => `\`${c}\``).join(',')}) VALUES (${values.join(',')});`
+          );
+        }
+      }
+
+      const gz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n', 'utf8'));
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+      res.set({
+        'Content-Type': 'application/gzip',
+        'Content-Disposition': `attachment; filename="pb_hub_seed_${stamp}.sql.gz"`,
+      });
+      res.send(gz);
+    } catch (err) {
+      console.error('[Export-Seed]', err.message);
+      res.status(500).json({ error: 'Export failed' });
     }
   });
 

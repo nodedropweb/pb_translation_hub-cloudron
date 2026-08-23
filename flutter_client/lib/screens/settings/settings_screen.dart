@@ -24,6 +24,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _syncing = false;
   bool _isUploading = false;
   double _uploadProgress = 0.0;
+  bool _exportingSeed = false;
   
   // Admin fields
   bool _loadingAdmin = false;
@@ -337,6 +338,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       setState(() {
         _isUploading = false;
       });
+    }
+  }
+
+  // Downloads a content-only snapshot of the current DB (same tables/format
+  // as export_for_cloudron.sh --seed) so it can be dropped straight into
+  // server/seed/db_seed.sql.gz before the next Cloudron image build — no SSH
+  // to the server or shell access required, just an admin login.
+  Future<void> _exportSeed(AppLocalizations l10n) async {
+    setState(() {
+      _exportingSeed = true;
+    });
+
+    try {
+      final response = await _api.dio.get<Uint8List>(
+        '/admin/export-seed',
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      final bytes = response.data!;
+      final stamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+
+      await FilePicker.platform.saveFile(
+        fileName: 'pb_hub_seed_$stamp.sql.gz',
+        bytes: bytes,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.settingsExportSeedSuccess),
+            backgroundColor: const Color(0xFF2E7D32),
+          ),
+        );
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.settingsExportSeedFailed),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exportingSeed = false;
+        });
+      }
     }
   }
 
@@ -1177,6 +1227,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                               ],
                             ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Data Export Card (content-only DB snapshot for the Cloudron seed)
+                    GlassContainer(
+                      border: Border.all(color: attrs.borderMain),
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(LucideIcons.download, size: 20, color: attrs.brand600),
+                              const SizedBox(width: 8),
+                              Text(
+                                l10n.settingsExportSeed,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: attrs.textMain,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.settingsExportSeedDescription,
+                            style: TextStyle(fontSize: 13, color: attrs.textMuted),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _exportingSeed ? null : () => _exportSeed(l10n),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(50),
+                              backgroundColor: attrs.bgInput,
+                              foregroundColor: attrs.textMain,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: attrs.borderMain),
+                              ),
+                            ),
+                            icon: _exportingSeed
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: attrs.brand600),
+                                  )
+                                : const Icon(LucideIcons.download, size: 18),
+                            label: Text(
+                              _exportingSeed ? l10n.settingsExporting : l10n.settingsExportSeedButton,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         ],
                       ),
                     ),

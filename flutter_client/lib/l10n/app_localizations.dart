@@ -2714,6 +2714,42 @@ abstract class AppLocalizations {
   /// **'Lade hoch...'**
   String get settingsUploading;
 
+  /// No description provided for @settingsExportSeed.
+  ///
+  /// In de, this message translates to:
+  /// **'Datenstand exportieren'**
+  String get settingsExportSeed;
+
+  /// No description provided for @settingsExportSeedDescription.
+  ///
+  /// In de, this message translates to:
+  /// **'Lädt einen Snapshot aller Übersetzungen und Projekte als .sql.gz herunter — für den nächsten Cloudron-Image-Build als server/seed/db_seed.sql.gz.'**
+  String get settingsExportSeedDescription;
+
+  /// No description provided for @settingsExportSeedButton.
+  ///
+  /// In de, this message translates to:
+  /// **'Snapshot herunterladen'**
+  String get settingsExportSeedButton;
+
+  /// No description provided for @settingsExporting.
+  ///
+  /// In de, this message translates to:
+  /// **'Exportiere...'**
+  String get settingsExporting;
+
+  /// No description provided for @settingsExportSeedSuccess.
+  ///
+  /// In de, this message translates to:
+  /// **'Export erfolgreich heruntergeladen.'**
+  String get settingsExportSeedSuccess;
+
+  /// No description provided for @settingsExportSeedFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Export fehlgeschlagen.'**
+  String get settingsExportSeedFailed;
+
   /// No description provided for @settingsErrorDiagnostics.
   ///
   /// In de, this message translates to:

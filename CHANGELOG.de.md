@@ -9,7 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
-## [Unreleased]
+## [0.4.0] — 2026-08-23
+
+### Hinzugefügt
+
+- **Optionaler First-Boot-Daten-Seed.** `SEED_ON_FIRST_BOOT=true` an der App gesetzt, wird ein gebackener Content-Snapshot (`server/seed/db_seed.sql.gz`, erzeugt von `pb_translation_hub/export_for_cloudron.sh --seed`) automatisch importiert, sobald die Schema-Migrationen gelaufen sind — vorausgesetzt `projects` ist noch leer. Eine Frischinstallation kann so gleich mit dem vollständigen Übersetzungs-Korpus starten, kein manueller `cloudron push`/DB-Import nötig. Es werden nur Content-Tabellen geseedet (`projects`, `translations`, `glossary_terms`, `priority_projects`, `ignored_projects`, `sync_events`, `site_settings`) — `users` und `schema_migrations` sind ausgenommen, sodass eine geseedete Instanz weiterhin einen frischen Admin-Account per normaler Registrierung bekommt und die Migrations-Buchführung unangetastet bleibt. Übersetzungs-JSON-Dateien sind ebenfalls nicht Teil des Seeds — die bestehende Startup-Regeneration (`ensureTranslationFilesFromDb()`) baut sie automatisch aus der jetzt befüllten `translations`-Tabelle neu auf. Rührt eine bereits befüllte Datenbank nie an, die Env-Var kann also dauerhaft über Neustarts/Updates hinweg gesetzt bleiben.
+- **Admin-UI-Datenexport ("Datenstand exportieren" in den Einstellungen).** `GET /api/admin/export-seed` baut einen Content-only, gzip-komprimierten SQL-Dump derselben Tabellen wie der First-Boot-Seed oben, direkt über die bereits offene `mysql2`-Verbindung (kein `mariadb-dump`/`mysqldump`-Binary nötig, funktioniert also unabhängig davon, was ein Deployment-Ziel mitliefert) — ein Admin kann ihn direkt aus dem Browser herunterladen und als `server/seed/db_seed.sql.gz` für den nächsten Image-Build ablegen, ohne SSH- oder Shell-Zugriff auf irgendeinen Server.
 
 ## [2.4.0] — 2026-08-22
 

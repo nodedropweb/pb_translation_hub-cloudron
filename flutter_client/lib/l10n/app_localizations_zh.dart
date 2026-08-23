@@ -1403,6 +1403,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsUploading => '正在上传...';
 
   @override
+  String get settingsExportSeed => 'Datenstand exportieren';
+
+  @override
+  String get settingsExportSeedDescription =>
+      'Lädt einen Snapshot aller Übersetzungen und Projekte als .sql.gz herunter — für den nächsten Cloudron-Image-Build als server/seed/db_seed.sql.gz.';
+
+  @override
+  String get settingsExportSeedButton => 'Snapshot herunterladen';
+
+  @override
+  String get settingsExporting => 'Exportiere...';
+
+  @override
+  String get settingsExportSeedSuccess => 'Export erfolgreich heruntergeladen.';
+
+  @override
+  String get settingsExportSeedFailed => 'Export fehlgeschlagen.';
+
+  @override
   String get settingsErrorDiagnostics => '错误诊断与系统日志';
 
   @override
