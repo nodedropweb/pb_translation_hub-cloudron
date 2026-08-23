@@ -618,7 +618,8 @@ const ctx = {
   getFilteredIndex,
   upload,
   uploadAvatar,
-  importSqlDump
+  importSqlDump,
+  regenerateTranslationFilesFromDb
 };
 
 // --- Health endpoint (circuit breaker probe for pb_localizer) ---
@@ -737,6 +738,54 @@ async function seedFromBundledDataIfRequested() {
 //     Legacy migration: add the `is_reviewed` field to older JSON files that
 //     were written before that field existed.
 
+// Writes every row of the `translations` table out to its JSON file under
+// TRANSLATIONS_DIR, unconditionally overwriting whatever's there — this is
+// the DB→file sync in one direction. `GET /:langcode/:filename` in
+// routes/translations.js (what pb_localizer's ProxyManager on the Drupal
+// side actually fetches) serves these files, not the DB directly, so
+// anything that changes `translations` without also calling this leaves
+// Drupal serving stale content indefinitely. Used by ensureTranslationFilesFromDb()
+// at startup (empty-directory case) and, deliberately unconditionally, after
+// an admin-triggered SQL import in routes/translations.js's /upload-backup —
+// that import's INSERT ... ON DUPLICATE KEY UPDATE can touch any subset of
+// rows, so regenerating everything is the simple way to guarantee the files
+// end up consistent with the DB regardless of what exactly was in the
+// imported dump. Returns the number of files written.
+async function regenerateTranslationFilesFromDb() {
+  const [rows] = await db.execute(
+    'SELECT machine_name, langcode, title, summary, body, screenshot_alts, source_hash, is_reviewed, updated_at FROM translations'
+  );
+
+  let written = 0;
+  for (const row of rows) {
+    let screenshotAlts = [];
+    try { if (row.screenshot_alts) screenshotAlts = JSON.parse(row.screenshot_alts); } catch (_) {}
+
+    const data = {
+      machine_name:    row.machine_name,
+      title:           row.title || '',
+      body:            { value: row.body || '', summary: row.summary || '' },
+      screenshot_alts: screenshotAlts,
+      is_reviewed:     row.is_reviewed === 1,
+      source_hash:     row.source_hash || '',
+      updated: row.updated_at
+        ? Math.floor(new Date(row.updated_at).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
+    };
+
+    const dir  = path.join(TRANSLATIONS_DIR, row.langcode);
+    const file = path.join(dir, `${row.machine_name}.json`);
+    try {
+      await fs.ensureDir(dir);
+      await fs.writeJson(file, data, { spaces: 2 });
+      written++;
+    } catch (e) {
+      console.error(`[Translation Files] Could not write ${file}: ${e.message}`);
+    }
+  }
+  return written;
+}
+
 async function ensureTranslationFilesFromDb() {
   try {
     // Count existing files across all language subdirs
@@ -754,40 +803,8 @@ async function ensureTranslationFilesFromDb() {
       return;
     }
 
-    // Directory is empty — regenerate from DB
     console.log('[Startup] Translation files missing. Regenerating from DB…');
-    const [rows] = await db.execute(
-      'SELECT machine_name, langcode, title, summary, body, screenshot_alts, source_hash, is_reviewed, updated_at FROM translations'
-    );
-
-    let written = 0;
-    for (const row of rows) {
-      let screenshotAlts = [];
-      try { if (row.screenshot_alts) screenshotAlts = JSON.parse(row.screenshot_alts); } catch (_) {}
-
-      const data = {
-        machine_name:    row.machine_name,
-        title:           row.title || '',
-        body:            { value: row.body || '', summary: row.summary || '' },
-        screenshot_alts: screenshotAlts,
-        is_reviewed:     row.is_reviewed === 1,
-        source_hash:     row.source_hash || '',
-        updated: row.updated_at
-          ? Math.floor(new Date(row.updated_at).getTime() / 1000)
-          : Math.floor(Date.now() / 1000),
-      };
-
-      const dir  = path.join(TRANSLATIONS_DIR, row.langcode);
-      const file = path.join(dir, `${row.machine_name}.json`);
-      try {
-        await fs.ensureDir(dir);
-        await fs.writeJson(file, data, { spaces: 2 });
-        written++;
-      } catch (e) {
-        console.error(`[Startup] Could not write ${file}: ${e.message}`);
-      }
-    }
-
+    const written = await regenerateTranslationFilesFromDb();
     console.log(`[Startup] Regenerated ${written} translation file(s) from DB.`);
   } catch (e) {
     console.error('[Startup] Translation file regeneration failed (non-fatal):', e.message);

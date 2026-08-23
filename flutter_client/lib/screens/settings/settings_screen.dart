@@ -27,6 +27,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isUploading = false;
   double _uploadProgress = 0.0;
   bool _exportingSeed = false;
+  String _exportStage = '';
   
   // Admin fields
   bool _loadingAdmin = false;
@@ -294,6 +295,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       var message = l10n.settingsBackupSuccess(count.toString());
       if (sqlImport is Map && sqlImport['success'] == true) {
         message += ' + ${sqlImport['statements']} SQL statements imported';
+        if (sqlImport['filesRegenerated'] != null) {
+          message += ', ${sqlImport['filesRegenerated']} translation files resynced';
+        } else if (sqlImport['regenerationError'] != null) {
+          message += ' (file resync failed: ${sqlImport['regenerationError']})';
+        }
       } else if (sqlImport is Map && sqlImport['success'] == false) {
         message += ' (SQL import failed: ${sqlImport['error']})';
       }
@@ -331,6 +337,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _exportSeed(AppLocalizations l10n) async {
     setState(() {
       _exportingSeed = true;
+      // This is a single request/response — the server doesn't stream
+      // progress for it — so this is one honest stage description, not a
+      // fake percentage. It updates once more right before the download
+      // itself fires (see below).
+      _exportStage = 'Erstelle Datenbank-Dump und bündle Kategorie-Übersetzungen …';
     });
 
     try {
@@ -356,6 +367,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final filename = response.data['filename'] as String;
       final downloadUrl = '${ApiClient.baseUrl}/admin/export-seed/download/$token';
 
+      if (mounted) {
+        setState(() {
+          _exportStage = 'Starte Download …';
+        });
+      }
       triggerDownload(downloadUrl, filename);
 
       if (mounted) {
@@ -1176,29 +1192,46 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                             )
                           else
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            Builder(
+                              // The upload itself has real byte-level progress
+                              // (onSendProgress below); once it reaches 100%,
+                              // the server is extracting the archive, possibly
+                              // importing a SQL dump, and regenerating
+                              // translation files — none of which streams
+                              // progress back, so that phase is honestly shown
+                              // as indeterminate rather than a fake percentage.
+                              builder: (context) {
+                                final uploadDone = _uploadProgress >= 1.0;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    Text(
-                                      l10n.settingsUploading,
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: attrs.textMuted),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            uploadDone
+                                                ? 'Verarbeite auf dem Server (entpacken, Datenbank importieren, Dateien synchronisieren) …'
+                                                : l10n.settingsUploading,
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: attrs.textMuted),
+                                          ),
+                                        ),
+                                        if (!uploadDone)
+                                          Text(
+                                            '${(_uploadProgress * 100).toStringAsFixed(0)}%',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: attrs.brand600),
+                                          ),
+                                      ],
                                     ),
-                                    Text(
-                                      '${(_uploadProgress * 100).toStringAsFixed(0)}%',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: attrs.brand600),
+                                    const SizedBox(height: 8),
+                                    LinearProgressIndicator(
+                                      value: uploadDone ? null : _uploadProgress,
+                                      color: attrs.brand600,
+                                      backgroundColor: attrs.bgInput,
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 8),
-                                LinearProgressIndicator(
-                                  value: _uploadProgress,
-                                  color: attrs.brand600,
-                                  backgroundColor: attrs.bgInput,
-                                ),
-                              ],
+                                );
+                              },
                             ),
                         ],
                       ),
@@ -1256,6 +1289,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
+                          if (_exportingSeed) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: attrs.brand600),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _exportStage,
+                                    style: TextStyle(fontSize: 12, color: attrs.textMuted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),

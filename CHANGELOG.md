@@ -9,6 +9,16 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.6] — 2026-08-23
+
+### Fixed
+
+- **The 0.4.5 SQL-import feature updated the DB but left Drupal serving stale translations indefinitely.** Caught by asking, while testing: "reicht das wirklich, dass was in der Datenbank steht — kommt das dann auch so in Drupal an?" The answer was no. `GET /:langcode/:filename` in `routes/translations.js` — the public route pb_localizer's `ProxyManager` on the Drupal side actually fetches — serves files from `TRANSLATIONS_DIR`, not the DB. `ensureTranslationFilesFromDb()` only regenerates those files if the directory is completely empty (the fresh-install case), so an admin-triggered import via `/upload-backup` updated `translations` correctly but never touched the files Drupal reads, leaving them stale until an unrelated event happened to trigger regeneration. Extracted the file-writing loop into `regenerateTranslationFilesFromDb()` and now call it unconditionally after a successful SQL import, rewriting every translation file from the now-updated table — simpler and more robust than trying to figure out which specific rows the imported dump touched. The upload-backup response's `sqlImport` field now also reports `filesRegenerated`.
+
+### Changed
+
+- **Export and import buttons now show what's actually happening instead of a bare spinner.** The export card displays its real (single) stage — building the dump and bundling categories, then starting the download — next to a small spinner. The import card already had real byte-level upload progress; once that hits 100%, it now switches to an honest indeterminate indicator labeled "processing on server (extracting, importing, resyncing)" for the phase that has no progress signal to report, rather than leaving the bar sitting at 100% while the request is still very much in flight.
+
 ## [0.4.5] — 2026-08-23
 
 ### Added

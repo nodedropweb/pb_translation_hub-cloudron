@@ -9,6 +9,16 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.6] — 2026-08-23
+
+### Behoben
+
+- **Das SQL-Import-Feature aus 0.4.5 aktualisierte die DB, ließ Drupal aber dauerhaft veraltete Übersetzungen ausliefern.** Beim Testen durch Nachfragen entdeckt: "reicht das wirklich, dass was in der Datenbank steht — kommt das dann auch so in Drupal an?" Die Antwort war nein. `GET /:langcode/:filename` in `routes/translations.js` — die öffentliche Route, die pb_localizers `ProxyManager` auf der Drupal-Seite tatsächlich abruft — liefert Dateien aus `TRANSLATIONS_DIR`, nicht die DB. `ensureTranslationFilesFromDb()` regeneriert diese Dateien nur, wenn das Verzeichnis komplett leer ist (der Frisch-Install-Fall), weshalb ein admin-ausgelöster Import über `/upload-backup` zwar `translations` korrekt aktualisierte, aber nie die Dateien anfasste, die Drupal liest — die blieben veraltet, bis zufällig ein anderes Ereignis eine Regenerierung auslöste. Die Datei-Schreib-Schleife wurde in `regenerateTranslationFilesFromDb()` extrahiert und wird jetzt nach einem erfolgreichen SQL-Import bedingungslos aufgerufen, wodurch jede Übersetzungsdatei aus der jetzt aktualisierten Tabelle neu geschrieben wird — einfacher und robuster, als herauszufinden, welche konkreten Zeilen der importierte Dump betraf. Das `sqlImport`-Feld der Upload-Backup-Antwort meldet jetzt zusätzlich `filesRegenerated`.
+
+### Geändert
+
+- **Export- und Import-Button zeigen jetzt, was tatsächlich passiert, statt eines nackten Spinners.** Die Export-Karte zeigt ihre reale (einzelne) Phase — Dump erstellen und Kategorien bündeln, dann Download starten — neben einem kleinen Spinner. Die Import-Karte hatte bereits echten byteweisen Upload-Fortschritt; sobald der 100 % erreicht, wechselt sie jetzt zu einer ehrlichen, unbestimmten Anzeige mit der Beschriftung "verarbeite auf dem Server (entpacken, importieren, synchronisieren)" für die Phase, für die es kein Fortschrittssignal gibt — statt den Balken bei 100 % stehen zu lassen, während die Anfrage noch mitten in der Verarbeitung ist.
+
 ## [0.4.5] — 2026-08-23
 
 ### Hinzugefügt

@@ -17,7 +17,8 @@ module.exports = (ctx) => {
     TRANSLATIONS_DIR,
     fixRelativeUrls,
     upload,
-    importSqlDump
+    importSqlDump,
+    regenerateTranslationFilesFromDb
   } = ctx;
   const router = express.Router();
 
@@ -450,6 +451,23 @@ module.exports = (ctx) => {
           resolve();
         });
       });
+
+      // A successful SQL import updated `translations`, but the public
+      // GET /:langcode/:filename route below (what pb_localizer's
+      // ProxyManager on the Drupal side actually fetches) serves the JSON
+      // files, not the DB — without this, Drupal keeps serving whatever was
+      // on disk before the import indefinitely. Regenerates every file from
+      // the now-updated table rather than trying to figure out which rows
+      // the imported dump actually touched.
+      if (sqlImport?.success) {
+        try {
+          const filesWritten = await regenerateTranslationFilesFromDb();
+          sqlImport.filesRegenerated = filesWritten;
+        } catch (regenErr) {
+          console.error('Post-import file regeneration error:', regenErr.message);
+          sqlImport.regenerationError = regenErr.message;
+        }
+      }
 
       try {
         const langcodes = await fs.readdir(TRANSLATIONS_DIR);
