@@ -9,6 +9,16 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.11] — 2026-08-23
+
+### Hinzugefügt
+
+- **Der Admin-Bootstrap garantiert jetzt einen funktionierenden Login, nicht nur einen optionalen.** Ein reiner `cloudron install` ohne zusätzliche Konfiguration ließ die Instanz bisher ganz ohne Admin-Account und ohne Weg hinein zurück — dieselbe Art "still kaputter Quickstart"-Bug, den die frühere `JWT_SECRET`-Auto-Generierung schon behoben hatte, nur diesmal für den Admin-Account. `ADMIN_USERNAME`/`ADMIN_PASSWORD` erlauben weiterhin eigene Werte, greifen aber jetzt standardmäßig auf Benutzername `admin` mit zufällig generiertem Passwort zurück, falls nicht gesetzt — einmalig im Start-Log ausgegeben und unter `/app/data/.admin_credentials` gespeichert, genau wie beim JWT-Secret. `POSTINSTALL.md` (im Cloudron-Dashboard direkt nach der Installation angezeigt) und beide Deployment-Guides entsprechend aktualisiert.
+
+### Behoben
+
+- **Der SQL-Import-Pfad (sowohl der First-Boot-Seed als auch der in 0.4.5 hinzugefügte admin-ausgelöste Import) crashte die komplette App mit OOM auf dem echten Datensatz.** Live bestätigt beim Import eines echten Exports (zehntausende `projects`/`translations`-Zeilen) in eine frische Instanz: `FATAL ERROR: Reached heap limit ... JavaScript heap out of memory`, `Runtime_StringSplit` ganz oben im Stack. `importSqlDump()` las den komplett entpackten SQL-Text (zig MB — allein `projects.data` hält einen vollständigen JSON-Blob pro Zeile) als einen JS-String ein und führte mehrere Whole-String-`.split()`/`.join()`/`.filter()`/`.map()`-Durchläufe darüber aus, um Statement-Grenzen zu finden — die Zwischenkopien und riesigen Substring-Arrays sprengten den Heap. Dieselbe Art von Bug wie beim Export-OOM aus 0.4.1, jetzt im passenden Import-Pfad. Umgeschrieben, um die Gzip-Datei zeilenweise über `readline` zu streamen statt den kompletten entpackten Text jemals als einen String zu materialisieren, jedes Statement wird direkt beim Lesen ausgeführt — der Spitzenspeicherverbrauch bleibt jetzt unabhängig von der Dateigröße annähernd konstant.
+
 ## [0.4.10] — 2026-08-23
 
 ### Behoben

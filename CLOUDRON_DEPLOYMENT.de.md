@@ -53,23 +53,34 @@ konfigurierten Domains, zusätzlich `--domain drupal.de` anhängen.
 
 Nach ca. 26 Sekunden ist die (leere) App unter `https://pb.drupal.de` erreichbar.
 
-**3. Ersten Admin-Account anlegen**
+**3. Ersten Admin-Account finden (oder selbst festlegen)**
 
 Dafür gibt es auf einer frischen Installation keinen Weg über die App selbst: Das
 Registrierungsformular legt nur Übersetzer-/Reviewer-Accounts an, und jeder neue Account startet
 mit `is_active=0`, wartet auf Freigabe durch einen Admin — den es auf einer brandneuen Instanz noch
-nicht gibt. `ADMIN_USERNAME`/`ADMIN_PASSWORD` (optional `ADMIN_EMAIL`) vor dem ersten Start setzen,
-oder direkt danach — die App prüft bei jedem Start, ob ein Admin-Account existiert, und legt einen
-aus diesen Werten an, falls nicht:
+nicht gibt. Die App regelt das selbst beim ersten Start, genau wie beim fehlenden `JWT_SECRET` —
+kein Handlungsbedarf, aber zwei mögliche Ausgänge, je nachdem ob konfiguriert wurde:
 
-```bash
-cloudron env set --app pb.drupal.de ADMIN_USERNAME=<benutzername> ADMIN_PASSWORD=<passwort>
-```
+- **Nichts gesetzt** → die App generiert ein zufälliges Passwort für den Benutzernamen `admin` und
+  gibt es einmalig im Start-Log aus:
+  ```bash
+  cloudron logs --app pb.drupal.de | grep -A3 "generated an admin account"
+  ```
+  Steht zusätzlich unter `/app/data/.admin_credentials` auf der App, falls die Log-Zeile verpasst
+  wurde:
+  ```bash
+  cloudron exec --app pb.drupal.de -- cat /app/data/.admin_credentials
+  ```
+  Damit einloggen und das Passwort in der App ändern.
+- **Eigene Werte festlegen** — vor dem ersten Start setzen (oder jederzeit, solange noch kein
+  Admin-Account existiert):
+  ```bash
+  cloudron env set --app pb.drupal.de ADMIN_USERNAME=<benutzername> ADMIN_PASSWORD=<passwort>
+  ```
 
-Das greift nur genau einmal — sobald ein Admin-Account existiert, werden die Env-Vars bei jedem
-weiteren Start ignoriert, das Stehenlassen ist also unbedenklich und setzt niemandem das Passwort
-zurück. Danach in der App einloggen und das Passwort ändern, falls es nicht dauerhaft in der
-Cloudron-Env-Konfiguration stehen bleiben soll.
+In beiden Fällen greift das nur genau einmal — sobald ein Admin-Account existiert, läuft das bei
+keinem weiteren Start mehr, generiertes Passwort hin oder her, kann also niemandem das Passwort
+zurücksetzen.
 
 **4. Übrige App-Secrets setzen (optional)**
 

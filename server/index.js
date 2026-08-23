@@ -8,6 +8,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
+const readline = require('readline');
 const mysql = require('mysql2/promise');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -699,57 +700,86 @@ app.use((err, req, res, next) => {
 // untouched. translation JSON files are NOT part of the seed — they're
 // already regenerated from the now-populated `translations` table by
 // ensureTranslationFilesFromDb() below, so nothing extra is needed for that.
-// Executes a `.sql` dump statement-by-statement (like db_migrate.js) rather
-// than as one multipleStatements query — a seed with tens of thousands of
-// lines as a single query exceeds MySQL's `max_allowed_packet` (hit in
-// practice: "Got a packet bigger than 'max_allowed_packet' bytes"). Individual
-// INSERTs stay small since both export producers (export_for_cloudron.sh
-// --seed and GET /api/admin/export-seed) deliberately write one statement per
-// line. Shared by the first-boot seed below and the admin-triggered import in
-// routes/translations.js (POST /upload-backup), so both go through the same
-// tested execution path. Returns the statement count; throws on failure —
-// callers decide whether that's fatal for them.
-async function importSqlDump(sql) {
-  const statements = sql
-    .split('\n')
-    .filter(line => !line.trim().startsWith('--') && line.trim() !== '')
-    .join('\n')
-    .split(/;\s*\n/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
+// Executes a gzipped `.sql` dump statement-by-statement (like db_migrate.js)
+// rather than as one multipleStatements query — a seed with tens of
+// thousands of lines as a single query exceeds MySQL's `max_allowed_packet`
+// (hit in practice: "Got a packet bigger than 'max_allowed_packet' bytes").
+// Individual INSERTs stay small since both export producers
+// (export_for_cloudron.sh --seed and GET /api/admin/export-seed)
+// deliberately write one statement per line. Shared by the first-boot seed
+// below and the admin-triggered import in routes/translations.js (POST
+// /upload-backup), so both go through the same tested execution path.
+// Returns the statement count; throws on failure — callers decide whether
+// that's fatal for them.
+//
+// Takes a file path, not a pre-read string, and streams it line by line via
+// readline instead — an earlier version took the fully decompressed SQL text
+// as one JS string and ran several whole-string .split()/.join() passes over
+// it to find statement boundaries. On the real dataset (tens of thousands of
+// rows, `projects.data` alone holding a full JSON blob per row) those
+// intermediate copies and giant arrays of substrings OOM-crashed the whole
+// process mid-request — confirmed live: "FATAL ERROR: Reached heap limit...
+// JavaScript heap out of memory" with `Runtime_StringSplit` at the top of the
+// stack. Same class of bug as the 0.4.1 export OOM fix, now applied to the
+// matching import path; peak memory now stays roughly constant regardless of
+// file size.
+async function importSqlDump(sqlGzPath) {
+  const lineStream = fs.createReadStream(sqlGzPath).pipe(zlib.createGunzip());
+  const rl = readline.createInterface({ input: lineStream, crlfDelay: Infinity });
 
   const conn = await db.getConnection();
+  let count = 0;
   try {
-    for (const stmt of statements) {
+    for await (const rawLine of rl) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('--')) continue;
+      // Each line is already exactly one complete statement (see the
+      // producers named above), terminated by ';'.
+      const stmt = line.endsWith(';') ? line.slice(0, -1) : line;
       await conn.query(stmt);
+      count++;
     }
   } finally {
     conn.release();
   }
-  return statements.length;
+  return count;
 }
 
 // A fresh install has no way to create the first admin account through the
 // UI: POST /auth/register only accepts user_type 'translator'/'reviewer' and
 // always inserts is_active=0, pending approval by an admin that doesn't
 // exist yet on a brand-new instance — a real bootstrap deadlock, found while
-// actually testing the fresh-install path end-to-end. If ADMIN_USERNAME and
-// ADMIN_PASSWORD are set, this creates that one admin account, active
-// immediately, no approval needed. Only acts when no admin exists yet (same
-// guard style as seedFromBundledDataIfRequested()) — an update or restart
-// with the env vars still set does nothing once an admin is there, so this
-// can't reset anyone's password out from under them. ADMIN_EMAIL is
-// optional; the column allows NULL.
+// actually testing the fresh-install path end-to-end.
+//
+// ADMIN_USERNAME/ADMIN_PASSWORD (set before or after first boot) still let
+// you choose your own values, same as JWT_SECRET — but requiring them was
+// itself a foot-gun: a plain `cloudron install` with no extra config used to
+// leave the instance with no admin account at all and no way in, which is
+// the exact same class of "silently broken Quickstart" bug JWT_SECRET's
+// auto-generation fixed. So this now always guarantees a working admin
+// account: defaults ADMIN_USERNAME to 'admin' and generates a random
+// ADMIN_PASSWORD if either is unset, same pattern as resolveJwtSecret() —
+// persisted to DATA_DIR and printed to the startup log (`cloudron logs`),
+// since that's the one place a Cloudron user reliably knows to look right
+// after "app is installed" with no other feedback.
+//
+// Only acts when no admin exists yet (same guard style as
+// seedFromBundledDataIfRequested()) — an update or restart does nothing once
+// an admin is there, so this can't reset anyone's password out from under
+// them, generated or not.
 async function ensureAdminAccountIfConfigured() {
-  const { ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL } = process.env;
-  if (!ADMIN_USERNAME || !ADMIN_PASSWORD) return;
+  const username = process.env.ADMIN_USERNAME || 'admin';
+  let password = process.env.ADMIN_PASSWORD;
+  const wasGenerated = !password;
 
   try {
     const [[{ count }]] = await db.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'");
     if (count > 0) {
-      console.log('[Startup] An admin account already exists — ADMIN_USERNAME/ADMIN_PASSWORD bootstrap skipped.');
+      console.log('[Startup] An admin account already exists — admin bootstrap skipped.');
       return;
     }
+
+    if (wasGenerated) password = crypto.randomBytes(16).toString('hex');
 
     // user_type is an ENUM('translator', 'reviewer') — it distinguishes
     // those two roles for a non-admin account and doesn't accept 'admin' at
@@ -758,15 +788,32 @@ async function ensureAdminAccountIfConfigured() {
     // failing the whole bootstrap). It's irrelevant for an actual admin —
     // `role = 'admin'` alone already satisfies every isAdmin/isReviewerOrAdmin
     // check in the app — so this just leaves it at its schema default.
-    const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     await db.execute(
       'INSERT INTO users (username, password, name, email, role, user_type, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [ADMIN_USERNAME, hashedPassword, ADMIN_USERNAME, ADMIN_EMAIL || null, 'admin', 'translator', 1]
+      [username, hashedPassword, username, process.env.ADMIN_EMAIL || null, 'admin', 'translator', 1]
     );
-    console.log(`[Startup] Created admin account '${ADMIN_USERNAME}' from ADMIN_USERNAME/ADMIN_PASSWORD.`);
+
+    if (wasGenerated) {
+      const credPath = path.join(DATA_DIR, '.admin_credentials');
+      fs.writeFileSync(
+        credPath,
+        `username: ${username}\npassword: ${password}\ngenerated: ${new Date().toISOString()}\n`,
+        { mode: 0o600 }
+      );
+      console.log('==================================================================');
+      console.log(`[Startup] No ADMIN_USERNAME/ADMIN_PASSWORD set — generated an admin account.`);
+      console.log(`[Startup]   Username: ${username}`);
+      console.log(`[Startup]   Password: ${password}`);
+      console.log(`[Startup] Also saved to ${credPath}. Log in and change the password, or`);
+      console.log('[Startup] set ADMIN_USERNAME/ADMIN_PASSWORD yourself before the next fresh install.');
+      console.log('==================================================================');
+    } else {
+      console.log(`[Startup] Created admin account '${username}' from ADMIN_USERNAME/ADMIN_PASSWORD.`);
+    }
   } catch (e) {
     if (e.code === 'ER_DUP_ENTRY') {
-      console.error(`[Startup] ADMIN_USERNAME '${ADMIN_USERNAME}' is already taken by an existing non-admin user — bootstrap skipped. Choose a different ADMIN_USERNAME or promote that account manually.`);
+      console.error(`[Startup] Admin username '${username}' is already taken by an existing non-admin user — bootstrap skipped. Set a different ADMIN_USERNAME or promote that account manually.`);
     } else {
       console.error('[Startup] Admin account bootstrap failed (non-fatal):', e.message);
     }
@@ -794,9 +841,8 @@ async function seedFromBundledDataIfRequested() {
   }
 
   console.log('[Seed] Importiere gebackenes Seed-Paket …');
-  const sql = zlib.gunzipSync(await fs.readFile(seedPath)).toString('utf8');
   try {
-    const statementCount = await importSqlDump(sql);
+    const statementCount = await importSqlDump(seedPath);
     const [[{ count: after }]] = await db.execute('SELECT COUNT(*) AS count FROM projects');
     console.log(`[Seed] Fertig — ${after} Projekte importiert (${statementCount} Statements).`);
   } catch (e) {
@@ -975,9 +1021,10 @@ app.listen(PORT, async () => {
     process.exit(1); // Hard fail — Server darf nicht mit falschem Schema laufen
   }
 
-  // Bootstrap the first admin account from ADMIN_USERNAME/ADMIN_PASSWORD if
-  // set and none exists yet — see ensureAdminAccountIfConfigured() for why
-  // this has to exist at all (no in-app path creates the first admin).
+  // Bootstrap the first admin account if none exists yet — from
+  // ADMIN_USERNAME/ADMIN_PASSWORD if set, generated otherwise. See
+  // ensureAdminAccountIfConfigured() for why this has to exist at all (no
+  // in-app path creates the first admin).
   await ensureAdminAccountIfConfigured();
 
   // Optional first-boot seed (opt-in, no-op unless SEED_ON_FIRST_BOOT=true and

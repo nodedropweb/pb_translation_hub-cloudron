@@ -50,21 +50,33 @@ domains, add `--domain drupal.de`.
 
 After roughly 26 seconds, the (empty) app is reachable at `https://pb.drupal.de`.
 
-**3. Create the first admin account**
+**3. Find (or set) the first admin account**
 
 There's no in-app path to this on a fresh install: the registration form only creates
 translator/reviewer accounts, and every new account starts `is_active=0`, pending approval by an
-admin — who doesn't exist yet on a brand-new instance. Set `ADMIN_USERNAME`/`ADMIN_PASSWORD` (and
-optionally `ADMIN_EMAIL`) before the first boot, or right after — the app checks for an admin
-account on every startup and creates one from these if none exists yet:
+admin — who doesn't exist yet on a brand-new instance. The app handles this itself on first boot,
+the same way it handles a missing `JWT_SECRET` — no action required, but there are two outcomes
+depending on whether you configured it:
 
-```bash
-cloudron env set --app pb.drupal.de ADMIN_USERNAME=<username> ADMIN_PASSWORD=<password>
-```
+- **You didn't set anything** → the app generated a random password for the username `admin` and
+  printed it once to the startup log:
+  ```bash
+  cloudron logs --app pb.drupal.de | grep -A3 "generated an admin account"
+  ```
+  It's also saved at `/app/data/.admin_credentials` on the app if you missed the log line:
+  ```bash
+  cloudron exec --app pb.drupal.de -- cat /app/data/.admin_credentials
+  ```
+  Log in with those and change the password from the app.
+- **You want to choose your own values** — set these before the first boot (or any time before an
+  admin account exists):
+  ```bash
+  cloudron env set --app pb.drupal.de ADMIN_USERNAME=<username> ADMIN_PASSWORD=<password>
+  ```
 
-This only ever fires once — as soon as an admin account exists, the env vars are ignored on every
-subsequent boot, so leaving them set is safe and won't reset anyone's password. Log in and change
-the password from the app afterward if you'd rather not leave it in Cloudron's env config.
+Either way this only ever fires once — as soon as an admin account exists, nothing here runs again
+on a later boot, generated password or not, so it can't reset anyone's password out from under
+them.
 
 **4. Set the remaining app secrets (optional)**
 
@@ -214,7 +226,7 @@ config change and needs **no** new image, no rebuild, no `cloudron update`.
 
 | Variable | Purpose | If not set |
 |---|---|---|
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Bootstraps the first admin account on startup if no admin exists yet — there's no in-app path to create one (registration only creates translator/reviewer accounts, and they start pending approval by an admin who doesn't exist on a fresh install). Only acts once; ignored on every subsequent boot once an admin exists, so it's safe to leave set. | No admin account gets created — you're locked out of the app with no recovery path short of inserting a row directly in the DB. |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Bootstraps the first admin account on startup if no admin exists yet — there's no in-app path to create one (registration only creates translator/reviewer accounts, and they start pending approval by an admin who doesn't exist on a fresh install). Only acts once; ignored on every subsequent boot once an admin exists, so it's safe to leave set. | App generates username `admin` and a random password, prints it once to the startup log, and saves it to `/app/data/.admin_credentials` — see [step 3 of the Quickstart](#quickstart-fresh-install-with-the-github-image). Not a silent failure like the old behavior; you always end up with a working login. |
 | `ADMIN_EMAIL` | Email for the bootstrapped admin account (optional, the column allows `NULL`). | Admin account has no email set. |
 | `JWT_SECRET` | Signs the login tokens for **every** user (auth). The code only checks the signature, never re-checks the role against the database — anyone who knows the value can build themselves a token with `role: admin`. | App self-generates a random value on first boot and persists it under the data directory — no action needed. Set your own only for a known, portable value (e.g. shared across instances). |
 | `UNSPLASH_ACCESS_KEY` | Random background image for the theme (`/api/unsplash/random-bg`). | App falls back to a fixed set of background image URLs — cosmetic only, no error. |

@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
-const zlib = require('zlib');
 const AdmZip = require('adm-zip');
 
 module.exports = (ctx) => {
@@ -431,8 +430,7 @@ module.exports = (ctx) => {
       const seedDumpPath = path.join(destRoot, 'db_seed.sql.gz');
       if (await fs.pathExists(seedDumpPath)) {
         try {
-          const sql = zlib.gunzipSync(await fs.readFile(seedDumpPath)).toString('utf8');
-          const statementCount = await importSqlDump(sql);
+          const statementCount = await importSqlDump(seedDumpPath);
           sqlImport = { success: true, statements: statementCount };
         } catch (sqlErr) {
           console.error('Backup SQL import error:', sqlErr.message);

@@ -9,6 +9,16 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.11] — 2026-08-23
+
+### Added
+
+- **Admin bootstrap now guarantees a working login, not just an opt-in one.** A plain `cloudron install` with no extra config used to leave the instance with no admin account at all and no way in — the exact same class of "silently broken Quickstart" bug the earlier `JWT_SECRET` auto-generation fixed, just for the admin account instead. `ADMIN_USERNAME`/`ADMIN_PASSWORD` still let you choose your own values, but now default to username `admin` with a randomly generated password if unset, printed once to the startup log and saved to `/app/data/.admin_credentials` — same pattern as the JWT secret. `POSTINSTALL.md` (shown in the Cloudron dashboard right after install) and both deployment guides updated to point at this.
+
+### Fixed
+
+- **The SQL-import path (both the first-boot seed and the admin-triggered import added in 0.4.5) OOM-crashed the whole app on the real dataset.** Confirmed live, importing an actual export (tens of thousands of `projects`/`translations` rows) into a fresh instance: `FATAL ERROR: Reached heap limit ... JavaScript heap out of memory`, `Runtime_StringSplit` at the top of the stack. `importSqlDump()` read the fully decompressed SQL text (tens of MB — `projects.data` alone holds a full JSON blob per row) into one JS string, then ran several whole-string `.split()`/`.join()`/`.filter()`/`.map()` passes over it to find statement boundaries — the intermediate copies and giant substring arrays blew the heap. Same class of bug as the 0.4.1 export OOM, now hitting the matching import path. Rewrote it to stream the gzip file line-by-line via `readline` instead of ever materializing the whole decompressed text as one string, executing each statement as it's read — peak memory now stays roughly constant regardless of file size.
+
 ## [0.4.10] — 2026-08-23
 
 ### Fixed
