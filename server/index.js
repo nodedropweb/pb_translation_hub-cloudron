@@ -36,19 +36,29 @@ fs.ensureDirSync(UPLOADS_DIR);
 // `cloudron env set JWT_SECRET=...` step becomes optional, useful only if
 // someone wants a specific, portable value (e.g. to share one secret across
 // multiple app instances).
+//
+// Also writes the resolved value back to process.env.JWT_SECRET, not just a
+// local constant — lib/secretCrypto.js (derives its encryption key from
+// JWT_SECRET when ENCRYPTION_KEY isn't set) reads process.env directly at
+// module-load time, independent of anything index.js passes through ctx.
+// Missing this the first time round: the generator ran and logged
+// successfully, but secretCrypto.js still saw process.env.JWT_SECRET as
+// unset and threw on require() a few lines later, crashing startup anyway.
 function resolveJwtSecret() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
 
   const secretPath = path.join(DATA_DIR, '.jwt_secret');
+  let secret;
   if (fs.pathExistsSync(secretPath)) {
-    return fs.readFileSync(secretPath, 'utf8').trim();
+    secret = fs.readFileSync(secretPath, 'utf8').trim();
+  } else {
+    secret = crypto.randomBytes(48).toString('hex');
+    fs.ensureDirSync(DATA_DIR);
+    fs.writeFileSync(secretPath, secret, { mode: 0o600 });
+    console.log('[Startup] No JWT_SECRET configured — generated and persisted a new one at ' + secretPath);
   }
-
-  const generated = crypto.randomBytes(48).toString('hex');
-  fs.ensureDirSync(DATA_DIR);
-  fs.writeFileSync(secretPath, generated, { mode: 0o600 });
-  console.log('[Startup] No JWT_SECRET configured — generated and persisted a new one at ' + secretPath);
-  return generated;
+  process.env.JWT_SECRET = secret;
+  return secret;
 }
 const JWT_SECRET = resolveJwtSecret();
 

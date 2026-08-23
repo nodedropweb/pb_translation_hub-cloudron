@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.8] — 2026-08-23
+
+### Behoben
+
+- **Die JWT_SECRET-Auto-Generierung aus 0.4.7 crashte beim ersten Start immer noch — an anderer Stelle.** Beim Deployen von 0.4.7 zur tatsächlichen Verifikation entdeckt: Der Generator lief und loggte erfolgreich, dann crashte der Prozess ein paar Zeilen später trotzdem mit `Error: ENCRYPTION_KEY or JWT_SECRET must be set to encrypt stored API keys.` aus `lib/secretCrypto.js`, transitiv über `routes/auth.js` requiret. Dieses Modul liest `process.env.JWT_SECRET` direkt beim Laden — 0.4.7 stellte den aufgelösten Wert nur als lokale Konstante in `index.js` bereit, weshalb alles, was den Env-Var direkt liest (aktuell die einzige weitere Stelle, aber das Muster ist generisch), ihn weiterhin als nicht gesetzt sah. `resolveJwtSecret()` schreibt den Wert jetzt zurück in `process.env.JWT_SECRET`, bevor er zurückgegeben wird — konsistent überall im Prozess, nicht nur über `ctx`.
+
 ## [0.4.7] — 2026-08-23
 
 ### Behoben

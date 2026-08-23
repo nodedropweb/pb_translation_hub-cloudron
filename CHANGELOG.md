@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.8] — 2026-08-23
+
+### Fixed
+
+- **0.4.7's JWT_SECRET auto-generation still crashed on first boot — from a different module.** Deploying 0.4.7 to actually verify the fix: the generator ran and logged successfully, then the process crashed anyway a few lines later with `Error: ENCRYPTION_KEY or JWT_SECRET must be set to encrypt stored API keys.` from `lib/secretCrypto.js`, required transitively by `routes/auth.js`. That module reads `process.env.JWT_SECRET` directly at module-load time — 0.4.7 only exposed the resolved secret as a local constant in `index.js`, so anything reading the env var directly (this is currently the only other spot, but the pattern is generic) still saw it as unset. `resolveJwtSecret()` now writes the value back to `process.env.JWT_SECRET` before returning, so it's consistent everywhere in the process, not just through `ctx`.
+
 ## [0.4.7] — 2026-08-23
 
 ### Fixed
