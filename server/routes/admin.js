@@ -112,31 +112,57 @@ module.exports = (ctx) => {
   // next Cloudron image build. Built entirely from the already-open mysql2
   // pool (no mariadb-dump/mysqldump binary involved), so it works regardless
   // of what client tools a given deployment target ships.
+  //
+  // `projects` alone holds the entire Drupal.org catalog (tens of thousands
+  // of rows with a JSON blob each) — an earlier version that buffered every
+  // INSERT line into one big array, joined it into a string, then gzipped
+  // that in one shot, OOM-crashed the Node process on a real instance
+  // (heap blew past its container limit holding several full copies of the
+  // same data at once). This streams rows straight from MySQL into a gzip
+  // stream piped to the response instead, so memory stays roughly constant
+  // regardless of table size.
   router.get('/admin/export-seed', authenticateToken, isAdmin, async (req, res) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    res.set({
+      'Content-Type': 'application/gzip',
+      'Content-Disposition': `attachment; filename="pb_hub_seed_${stamp}.sql.gz"`,
+    });
+
+    const gzip = zlib.createGzip();
+    gzip.on('error', (err) => {
+      console.error('[Export-Seed] gzip error:', err.message);
+      res.destroy();
+    });
+    gzip.pipe(res);
+
+    const writeAndDrain = (chunk) => {
+      if (gzip.write(chunk)) return Promise.resolve();
+      return new Promise((resolve) => gzip.once('drain', resolve));
+    };
+
+    let conn;
     try {
-      const lines = ['SET NAMES utf8mb4;'];
+      await writeAndDrain('SET NAMES utf8mb4;\n');
+
+      conn = await db.getConnection();
       for (const table of SEED_TABLES) {
-        const [rows] = await db.query(`SELECT * FROM \`${table}\``);
-        for (const row of rows) {
+        const rowStream = conn.connection.query(`SELECT * FROM \`${table}\``).stream();
+        for await (const row of rowStream) {
           const columns = Object.keys(row);
           const values = columns.map((col) => db.escape(row[col]));
-          lines.push(
-            `INSERT INTO \`${table}\` (${columns.map((c) => `\`${c}\``).join(',')}) VALUES (${values.join(',')});`
+          await writeAndDrain(
+            `INSERT INTO \`${table}\` (${columns.map((c) => `\`${c}\``).join(',')}) VALUES (${values.join(',')});\n`
           );
         }
       }
 
-      const gz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n', 'utf8'));
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-
-      res.set({
-        'Content-Type': 'application/gzip',
-        'Content-Disposition': `attachment; filename="pb_hub_seed_${stamp}.sql.gz"`,
-      });
-      res.send(gz);
+      gzip.end();
     } catch (err) {
       console.error('[Export-Seed]', err.message);
-      res.status(500).json({ error: 'Export failed' });
+      gzip.destroy();
+      res.destroy();
+    } finally {
+      if (conn) conn.release();
     }
   });
 
