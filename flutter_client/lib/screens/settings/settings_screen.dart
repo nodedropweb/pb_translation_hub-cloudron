@@ -9,6 +9,8 @@ import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/log_service.dart';
+import '../../services/browser_download_stub.dart'
+    if (dart.library.html) '../../services/browser_download_web.dart';
 import '../../widgets/glass_container.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -351,18 +353,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     try {
-      final response = await _api.dio.get<Uint8List>(
-        '/admin/export-seed',
-        options: Options(responseType: ResponseType.bytes),
-      );
+      // Two-phase: the server builds the (tens-of-MB) gzipped dump to a temp
+      // file and hands back a short-lived, single-use download token instead
+      // of streaming the file straight into this response. That avoids
+      // buffering the whole export as bytes in the app and, more importantly,
+      // avoids routing the actual download through file_picker's "Save As"
+      // dialog — its underlying browser API needs a still-fresh user gesture,
+      // which a multi-second fetch can burn through. Triggering a plain
+      // browser download instead (see browser_download_web.dart) sidesteps
+      // that entirely and needs no Authorization header, since the token
+      // itself gates the second request.
+      final response = await _api.dio.get('/admin/export-seed');
+      final token = response.data['token'] as String;
+      final filename = response.data['filename'] as String;
+      final downloadUrl = '${ApiClient.baseUrl}/admin/export-seed/download/$token';
 
-      final bytes = response.data!;
-      final stamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
-
-      await FilePicker.platform.saveFile(
-        fileName: 'pb_hub_seed_$stamp.sql.gz',
-        bytes: bytes,
-      );
+      triggerDownload(downloadUrl, filename);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -373,10 +379,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       }
     } catch (err) {
+      LogService.error('Export seed failed', error: err);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.settingsExportSeedFailed),
+            content: Text('${l10n.settingsExportSeedFailed}: $err'),
             backgroundColor: Colors.redAccent,
           ),
         );

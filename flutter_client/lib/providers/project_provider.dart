@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/api_client.dart';
+import '../services/log_service.dart';
 import '../screens/dashboard/widgets/project_card.dart';
 import 'language_provider.dart';
 
@@ -275,7 +277,14 @@ class FilterCountsNotifier extends Notifier<FilterCounts> {
     return FilterCounts();
   }
 
-  Future<void> fetchCounts(String langcode, {int? coreVersion}) async {
+  // `/projects/filter-counts` runs several full-table aggregate queries
+  // (including an MD5-over-JSON scan for the stale count) and can occasionally
+  // exceed the client's default timeout under load — e.g. right after a large
+  // export streams the same tables from the same DB connection pool. That
+  // used to fail silently, leaving the dashboard stuck on all-zero counts
+  // until a manual reload. Now it logs and retries with a longer timeout
+  // instead of giving up on the first hiccup.
+  Future<void> fetchCounts(String langcode, {int? coreVersion, int attempt = 0}) async {
     try {
       final response = await _api.dio.get(
         '/projects/filter-counts',
@@ -283,10 +292,15 @@ class FilterCountsNotifier extends Notifier<FilterCounts> {
           'langcode': langcode,
           if (coreVersion != null) 'core_version': coreVersion,
         },
+        options: Options(receiveTimeout: const Duration(seconds: 60)),
       );
       state = FilterCounts.fromJson(response.data);
     } catch (e) {
-      // Ignore or log error
+      LogService.error('fetchCounts failed (attempt $attempt) for langcode=$langcode', error: e);
+      if (attempt < 2) {
+        await Future.delayed(const Duration(seconds: 3));
+        return fetchCounts(langcode, coreVersion: coreVersion, attempt: attempt + 1);
+      }
     }
   }
 

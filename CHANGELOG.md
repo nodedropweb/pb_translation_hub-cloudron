@@ -9,6 +9,13 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.2] — 2026-08-23
+
+### Fixed
+
+- **Dashboard counters silently stuck at zero.** `GET /api/projects/filter-counts` runs several full-table aggregate queries per request (including an MD5-over-JSON scan for the stale count) and could occasionally exceed the client's timeout under load — e.g. right after a large export streams the same tables from the same DB connection pool. The Flutter provider's error handler was a bare `// Ignore or log error` with nothing in it, so a single failed request left the dashboard on `FilterCounts()` defaults (all zero) until a full page reload, with nothing logged anywhere. `fetchCounts()` now logs the real error via the existing in-app `LogService` and retries up to twice with a longer receive timeout instead of giving up silently.
+- **Export button could complete server-side yet still fail (or succeed silently) in the browser.** The previous flow streamed the whole gzipped dump as this request's response, had the Flutter client buffer it entirely as bytes, and then handed those bytes to `file_picker`'s "Save As" dialog — whose underlying browser API (File System Access) requires a still-fresh user gesture, which a multi-second, tens-of-MB transfer can burn through, silently dropping the save with no exception the app's `catch` block would ever see. `GET /api/admin/export-seed` now only builds the dump to a temp file under `DATA_DIR/exports` and returns a short-lived (5 min), single-use download token; a new `GET /api/admin/export-seed/download/:token` (intentionally outside the normal Bearer-auth chain, since a plain browser navigation can't carry that header — secured instead by the 256-bit random token itself) is what the client then navigates to directly, triggering the browser's native download with no bytes ever buffered in the app. The generated file is deleted from disk as soon as that download finishes or errors, and any export a token was never picked up for is swept on the next export request. Failures also now log the actual error via `LogService` and show it in the failure snackbar instead of a generic message.
+
 ## [0.4.1] — 2026-08-23
 
 ### Fixed

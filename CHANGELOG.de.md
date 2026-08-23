@@ -9,6 +9,13 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.2] — 2026-08-23
+
+### Behoben
+
+- **Dashboard-Zähler blieben stillschweigend bei Null hängen.** `GET /api/projects/filter-counts` führt pro Anfrage mehrere Aggregat-Queries über die kompletten Tabellen aus (darunter ein MD5-über-JSON-Scan für den Stale-Zähler) und konnte unter Last gelegentlich das Timeout des Clients überschreiten — etwa direkt nach einem großen Export, der aus demselben DB-Connection-Pool dieselben Tabellen streamt. Die Fehlerbehandlung im Flutter-Provider war ein leeres `// Ignore or log error` — ein einziger fehlgeschlagener Request ließ das Dashboard auf den `FilterCounts()`-Standardwerten (alles Null) hängen, bis zum kompletten Neuladen der Seite, ohne dass irgendwo etwas geloggt wurde. `fetchCounts()` loggt den echten Fehler jetzt über den vorhandenen `LogService` und wiederholt den Versuch bis zu zweimal mit längerem Empfangs-Timeout, statt stillschweigend aufzugeben.
+- **Export-Button konnte serverseitig fertig werden und im Browser trotzdem fehlschlagen (oder still nichts tun).** Der bisherige Ablauf streamte den kompletten gzip-Dump als Antwort dieser Anfrage, ließ den Flutter-Client ihn komplett als Bytes puffern und übergab diese dann an den "Speichern unter"-Dialog von `file_picker` — dessen zugrundeliegende Browser-API (File System Access) eine noch frische User-Geste voraussetzt, die ein mehrsekündiger Transfer über zig MB aufbrauchen kann; das Speichern fiel dann lautlos aus, ohne eine Exception, die der `catch`-Block der App je zu sehen bekommen hätte. `GET /api/admin/export-seed` baut den Dump jetzt nur noch in eine temporäre Datei unter `DATA_DIR/exports` und liefert einen kurzlebigen (5 Min.), einmal verwendbaren Download-Token zurück; ein neuer Endpoint `GET /api/admin/export-seed/download/:token` (bewusst außerhalb der normalen Bearer-Auth-Kette, da eine reine Browser-Navigation diesen Header nicht mitschicken kann — abgesichert stattdessen über den 256-Bit-Zufallstoken selbst) ist das Ziel, zu dem der Client direkt navigiert, was den nativen Browser-Download auslöst, ohne je Bytes in der App zu puffern. Die erzeugte Datei wird gelöscht, sobald dieser Download abgeschlossen ist oder fehlschlägt; ein Export, dessen Token nie abgeholt wurde, wird beim nächsten Export-Aufruf aufgeräumt. Fehlschläge loggen jetzt außerdem den echten Fehler über `LogService` und zeigen ihn in der Fehler-Snackbar an statt einer generischen Meldung.
+
 ## [0.4.1] — 2026-08-23
 
 ### Behoben
