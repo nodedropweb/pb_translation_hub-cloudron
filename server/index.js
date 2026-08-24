@@ -1107,7 +1107,28 @@ function scheduleQuickSync() {
 // null field instead of throwing.
 const RESOURCE_SAMPLE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const RESOURCE_RETENTION_DAYS = 30;
+const ACCESS_LOG_RETENTION_DAYS = 90; // GDPR storage-limitation: enough for the 30-day chart plus a buffer, not indefinite
 const CODE_DIR = process.env.CLOUDRON ? '/app/code' : path.join(__dirname, '..');
+
+// Privacy-by-design: truncates an IP to its network prefix (last IPv4 octet
+// or last ~80 bits of IPv6 zeroed) — the same approach as e.g. Google
+// Analytics' old anonymizeIp. Only ever used as a fallback identifier for
+// callers that don't send X-PB-Site-Url (see logApiAccess below), so this is
+// deliberately too coarse to pinpoint one machine, just enough to tell
+// distinct anonymous callers apart roughly.
+function anonymizeIp(ip) {
+  if (!ip) return null;
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const v4 = mapped ? mapped[1] : ip;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
+    return v4.replace(/\.\d+$/, '.0');
+  }
+  const groups = ip.split(':');
+  if (groups.length >= 3) {
+    return `${groups.slice(0, 3).join(':')}::`;
+  }
+  return null;
+}
 let lastCpuUsageUsec = null;
 let lastCpuSampleAt = null;
 
@@ -1192,6 +1213,10 @@ async function sampleResources() {
       'DELETE FROM resource_samples WHERE sampled_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
       [RESOURCE_RETENTION_DAYS]
     );
+    await db.execute(
+      'DELETE FROM api_access_daily WHERE day < DATE_SUB(CURDATE(), INTERVAL ? DAY)',
+      [ACCESS_LOG_RETENTION_DAYS]
+    );
   } catch (e) {
     console.error('[ResourceMonitor] Sampling failed:', e.message);
   }
@@ -1215,8 +1240,16 @@ function scheduleResourceSampling() {
 // (see the res.on('finish', …) callers) — summed per bucket so the monitor
 // can show avg ms/access, the best available proxy for "how much does one
 // pb_localizer fetch cost the hub" without per-request CPU profiling.
+//
+// GDPR data minimization: the IP is only useful as a fallback identifier for
+// callers that don't send X-PB-Site-Url (older pb_localizer versions) — once
+// a site has self-identified, storing its IP too would be redundant, so it's
+// dropped entirely in that case. When it IS stored (unattributed traffic
+// only), it's first truncated to a network prefix via anonymizeIp() — never
+// the exact address.
 async function logApiAccess(siteUrl, ip, durationMs) {
   const ms = Math.round(durationMs) || 0;
+  const storedIp = siteUrl ? null : anonymizeIp(ip);
   try {
     await db.execute(
       `INSERT INTO api_access_daily (day, site_url, request_count, total_duration_ms, max_duration_ms, last_ip)
@@ -1227,7 +1260,7 @@ async function logApiAccess(siteUrl, ip, durationMs) {
          max_duration_ms = GREATEST(max_duration_ms, VALUES(max_duration_ms)),
          last_seen = CURRENT_TIMESTAMP,
          last_ip = VALUES(last_ip)`,
-      [siteUrl || '', ms, ms, ip || null]
+      [siteUrl || '', ms, ms, storedIp]
     );
   } catch (e) {
     console.error('[ResourceMonitor] Access log failed:', e.message);

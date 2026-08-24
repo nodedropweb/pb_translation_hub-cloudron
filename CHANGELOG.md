@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.21] — 2026-08-24
+
+### Changed
+
+- **GDPR data minimization for `api_access_daily`.** Three fixes: (1) the `last_ip` column is now only ever populated for requests that *don't* carry `X-PB-Site-Url` (older `pb_localizer` versions) — once a site self-identifies, storing its IP too was redundant and has been dropped; (2) when an IP is stored, it's now truncated to a network prefix (`anonymizeIp()`: last IPv4 octet or last ~80 bits of IPv6 zeroed) instead of kept in full; (3) `api_access_daily` previously had no retention limit at all (unlike `resource_samples`, which already pruned after 30 days) — it's now pruned to the last 90 days on the same 5-minute sampling tick.
+
 ## [0.4.20] — 2026-08-24
 
 ### Added

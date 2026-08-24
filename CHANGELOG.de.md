@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.21] — 2026-08-24
+
+### Geändert
+
+- **DSGVO-Datenminimierung für `api_access_daily`.** Drei Fixes: (1) `last_ip` wird nur noch gespeichert, wenn eine Anfrage **keinen** `X-PB-Site-Url`-Header mitschickt (ältere `pb_localizer`-Versionen) — sobald sich eine Seite selbst identifiziert, wäre die zusätzliche IP redundant und wird gar nicht mehr übergeben; (2) wenn eine IP gespeichert wird, wird sie jetzt auf ein Netzwerk-Präfix gekürzt (`anonymizeIp()`: letztes IPv4-Oktett bzw. letzte ~80 Bit von IPv6 maskiert) statt vollständig; (3) `api_access_daily` hatte bisher gar keine Löschfrist (anders als `resource_samples`, das schon nach 30 Tagen bereinigt wurde) — wird jetzt im selben 5-Minuten-Sample-Tick auf die letzten 90 Tage begrenzt.
+
 ## [0.4.20] — 2026-08-24
 
 ### Hinzugefügt

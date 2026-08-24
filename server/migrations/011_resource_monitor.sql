@@ -13,6 +13,18 @@
 -- die Tabelle auf Tage × bekannte Seiten begrenzt und reicht für den
 -- Zeitverlauf im Monitor. site_url = '' bedeutet: aufrufende pb_localizer-
 -- Version ist zu alt, um den X-PB-Site-Url-Header zu senden (nur IP bekannt).
+--
+-- DSGVO / Privacy by Design (siehe logApiAccess() in index.js):
+--   - Datenminimierung: last_ip wird NUR gespeichert, wenn site_url leer ist
+--     (Fallback-Identifikator für nicht-identifizierte Aufrufer) — sobald eine
+--     Site sich selbst über den Header identifiziert, wäre die IP redundant
+--     und wird gar nicht erst übergeben.
+--   - Wenn IP gespeichert wird: nur anonymisiert (anonymizeIp() maskiert das
+--     letzte IPv4-Oktett bzw. die letzten ~80 Bit von IPv6), nie die volle
+--     Adresse.
+--   - Speicherbegrenzung: automatische Löschung nach 90 Tagen
+--     (ACCESS_LOG_RETENTION_DAYS, läuft im selben 5-Minuten-Tick wie
+--     sampleResources()).
 
 CREATE TABLE IF NOT EXISTS resource_samples (
   id            INT AUTO_INCREMENT PRIMARY KEY,
