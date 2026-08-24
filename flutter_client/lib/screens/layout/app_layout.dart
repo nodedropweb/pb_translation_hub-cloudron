@@ -405,6 +405,15 @@ class _SidebarContent extends StatelessWidget {
                     GoRouterState.of(context).uri.path == '/help',
                 attrs: attrs,
               ),
+              if (ref.watch(authProvider).user?.isAdmin == true)
+                _NavItem(
+                  icon: LucideIcons.activitySquare,
+                  label: 'Ressourcen',
+                  route: '/monitor',
+                  isActive:
+                      GoRouterState.of(context).uri.path == '/monitor',
+                  attrs: attrs,
+                ),
               _NavItem(
                 icon: LucideIcons.settings,
                 label: l10n.layoutNavSettings,

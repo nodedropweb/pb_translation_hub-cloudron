@@ -9,6 +9,13 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.20] — 2026-08-24
+
+### Added
+
+- **Resource monitor.** New admin-only sidebar screen (`/monitor`) showing CPU/RAM/disk history (sampled every 5 minutes into `resource_samples`, migration 011) and, more importantly, which Drupal installations are actually calling the hub via `pb_localizer` — daily request counts per site, average server response time per access (the best available proxy for "how much does one fetch cost the hub" without per-request CPU profiling), and a live snapshot card. Backed by two new tables: `resource_samples` (time series) and `api_access_daily` (one upsert per day/site, not a raw per-request log — a single Drupal.org listing page can trigger dozens of hub calls, so a raw log would grow unbounded). Site attribution depends on `pb_localizer` 3.0.11+ sending the new `X-PB-Site-Url` header; older installations still count towards totals but show as "unbekannt (nur IP)".
+- `GET /api/monitor/summary`, `GET /api/monitor/resources`, `GET /api/monitor/access` — new admin-only endpoints (`server/routes/monitor.js`).
+
 ## [0.4.19] — 2026-08-24
 
 ### Added

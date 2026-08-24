@@ -17,7 +17,8 @@ module.exports = (ctx) => {
     fixRelativeUrls,
     upload,
     importSqlDump,
-    regenerateTranslationFilesFromDb
+    regenerateTranslationFilesFromDb,
+    logApiAccess
   } = ctx;
   const router = express.Router();
 
@@ -314,6 +315,11 @@ module.exports = (ctx) => {
       return res.status(403).json({ error: 'Invalid or missing debug key.' });
     }
 
+    const _accessStartedAt = process.hrtime.bigint();
+    const _siteUrl = req.get('X-PB-Site-Url');
+    res.on('finish', () => {
+      logApiAccess(_siteUrl, req.ip, Number(process.hrtime.bigint() - _accessStartedAt) / 1e6);
+    });
     const { langcode, filename } = req.params;
     const filePath = safeTranslationPath(langcode, filename);
     if (!filePath || !await fs.pathExists(filePath)) {
@@ -349,6 +355,16 @@ module.exports = (ctx) => {
   router.get('/:langcode/:filename', optionalAuth, async (req, res, next) => {
     const { langcode, filename } = req.params;
     if (RESERVED_PREFIXES.includes(langcode)) return next();
+    // Logged on 'finish' (not here) so durationMs reflects the real
+    // server-side response time, incl. the fs.pathExists/sendFile I/O below —
+    // this is what pb_localizer's ProxyManager calls for every translated
+    // module on a Drupal.org page. Fire-and-forget: must never add latency
+    // to the response it's measuring.
+    const _accessStartedAt = process.hrtime.bigint();
+    const _siteUrl = req.get('X-PB-Site-Url');
+    res.on('finish', () => {
+      logApiAccess(_siteUrl, req.ip, Number(process.hrtime.bigint() - _accessStartedAt) / 1e6);
+    });
     const filePath = safeTranslationPath(langcode, filename);
     if (!filePath || !await fs.pathExists(filePath)) {
       return res.status(404).json({ error: 'File not found' });

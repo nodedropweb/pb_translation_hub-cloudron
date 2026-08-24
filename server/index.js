@@ -9,6 +9,9 @@ const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const readline = require('readline');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const mysql = require('mysql2/promise');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -656,7 +659,13 @@ const ctx = {
   upload,
   uploadAvatar,
   importSqlDump,
-  regenerateTranslationFilesFromDb
+  regenerateTranslationFilesFromDb,
+  logApiAccess,
+  readCgroupMemory,
+  readCgroupCpuPercent,
+  readDirSizeMb,
+  readDbSizeMb,
+  dbConfig
 };
 
 // --- Health endpoint (circuit breaker probe for pb_localizer) ---
@@ -674,6 +683,7 @@ app.use('/api', require('./routes/admin')(ctx));
 app.use('/api', require('./routes/ai')(ctx));
 app.use('/api', require('./routes/glossary')(ctx));
 app.use('/api', require('./routes/dashboard')(ctx));
+app.use('/api', require('./routes/monitor')(ctx));
 app.use('/api', require('./routes/translations')(ctx));
 
 // Catches multer file-validation errors (e.g. the upload-backup file-type
@@ -1088,6 +1098,142 @@ function scheduleQuickSync() {
   }, QUICK_SYNC_INTERVAL_MS);
 }
 
+// ── Resource monitor: periodic CPU/RAM/disk sampling ──────────────────────────
+// Samples every 5 minutes into resource_samples (migration 011) so the
+// sidebar's resource-monitor screen can show a Netdata-style time series
+// instead of only a live snapshot. Reads cgroup v2 files directly — Cloudron
+// containers run on cgroup v2 (confirmed via `cloudron exec`). Every read is
+// wrapped so a missing file (e.g. local dev outside a container) yields a
+// null field instead of throwing.
+const RESOURCE_SAMPLE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const RESOURCE_RETENTION_DAYS = 30;
+const CODE_DIR = process.env.CLOUDRON ? '/app/code' : path.join(__dirname, '..');
+let lastCpuUsageUsec = null;
+let lastCpuSampleAt = null;
+
+async function readCgroupMemory() {
+  try {
+    const [current, max] = await Promise.all([
+      fs.readFile('/sys/fs/cgroup/memory.current', 'utf8'),
+      fs.readFile('/sys/fs/cgroup/memory.max', 'utf8'),
+    ]);
+    const usedMb = Math.round(parseInt(current.trim(), 10) / 1024 / 1024);
+    const maxTrimmed = max.trim();
+    const limitMb = maxTrimmed === 'max' ? null : Math.round(parseInt(maxTrimmed, 10) / 1024 / 1024);
+    return { usedMb, limitMb };
+  } catch {
+    return { usedMb: null, limitMb: null };
+  }
+}
+
+// % of one CPU core, averaged since the previous call — first call after
+// startup returns null (no previous usage_usec to diff against).
+async function readCgroupCpuPercent() {
+  try {
+    const stat = await fs.readFile('/sys/fs/cgroup/cpu.stat', 'utf8');
+    const match = stat.match(/usage_usec (\d+)/);
+    if (!match) return null;
+    const usageUsec = parseInt(match[1], 10);
+    const now = Date.now();
+    let percent = null;
+    if (lastCpuUsageUsec !== null && lastCpuSampleAt !== null) {
+      const deltaUsageUsec = usageUsec - lastCpuUsageUsec;
+      const deltaWallUsec = (now - lastCpuSampleAt) * 1000;
+      if (deltaWallUsec > 0) {
+        percent = Math.max(0, (deltaUsageUsec / deltaWallUsec) * 100);
+      }
+    }
+    lastCpuUsageUsec = usageUsec;
+    lastCpuSampleAt = now;
+    return percent;
+  } catch {
+    return null;
+  }
+}
+
+async function readDirSizeMb(dirPath) {
+  try {
+    const { stdout } = await execAsync(`du -sb "${dirPath}"`);
+    const bytes = parseInt(stdout.split('\t')[0], 10);
+    return Number.isNaN(bytes) ? null : Math.round(bytes / 1024 / 1024);
+  } catch {
+    return null;
+  }
+}
+
+async function readDbSizeMb() {
+  try {
+    const [rows] = await db.execute(
+      'SELECT SUM(data_length + index_length) AS bytes FROM information_schema.tables WHERE table_schema = ?',
+      [dbConfig.database]
+    );
+    const bytes = rows[0] && rows[0].bytes;
+    return bytes != null ? Math.round(bytes / 1024 / 1024) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sampleResources() {
+  try {
+    const [{ usedMb, limitMb }, cpuPercent, diskCodeMb, diskDataMb, diskDbMb] = await Promise.all([
+      readCgroupMemory(),
+      readCgroupCpuPercent(),
+      readDirSizeMb(CODE_DIR),
+      readDirSizeMb(DATA_DIR),
+      readDbSizeMb(),
+    ]);
+    await db.execute(
+      `INSERT INTO resource_samples (cpu_percent, mem_used_mb, mem_limit_mb, disk_code_mb, disk_data_mb, disk_db_mb)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [cpuPercent, usedMb, limitMb, diskCodeMb, diskDataMb, diskDbMb]
+    );
+    await db.execute(
+      'DELETE FROM resource_samples WHERE sampled_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+      [RESOURCE_RETENTION_DAYS]
+    );
+  } catch (e) {
+    console.error('[ResourceMonitor] Sampling failed:', e.message);
+  }
+}
+
+function scheduleResourceSampling() {
+  sampleResources(); // first sample right away so the monitor isn't empty on a fresh start
+  setInterval(sampleResources, RESOURCE_SAMPLE_INTERVAL_MS);
+}
+
+// ── Resource monitor: API access logging ──────────────────────────────────────
+// Called from the public, unauthenticated endpoints pb_localizer's
+// ProxyManager calls (translation file downloads, category names). One
+// upsert per (day, site) rather than a row per request — a single
+// Drupal.org listing page triggers one call per module shown, so a raw log
+// would grow unbounded (see migration 011's comment). site_url is '' when
+// the caller is running a pb_localizer version older than the one that
+// added the X-PB-Site-Url header — still counted, just not attributable.
+//
+// durationMs is the measured server-side response time for that one request
+// (see the res.on('finish', …) callers) — summed per bucket so the monitor
+// can show avg ms/access, the best available proxy for "how much does one
+// pb_localizer fetch cost the hub" without per-request CPU profiling.
+async function logApiAccess(siteUrl, ip, durationMs) {
+  const ms = Math.round(durationMs) || 0;
+  try {
+    await db.execute(
+      `INSERT INTO api_access_daily (day, site_url, request_count, total_duration_ms, max_duration_ms, last_ip)
+       VALUES (CURDATE(), ?, 1, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         request_count = request_count + 1,
+         total_duration_ms = total_duration_ms + VALUES(total_duration_ms),
+         max_duration_ms = GREATEST(max_duration_ms, VALUES(max_duration_ms)),
+         last_seen = CURRENT_TIMESTAMP,
+         last_ip = VALUES(last_ip)`,
+      [siteUrl || '', ms, ms, ip || null]
+    );
+  } catch (e) {
+    console.error('[ResourceMonitor] Access log failed:', e.message);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`PB Translation Hub Backend running on http://localhost:${PORT}`);
 
@@ -1119,4 +1265,8 @@ app.listen(PORT, async () => {
   // Start the automatic 7.5-day quick sync scheduler.
   scheduleQuickSync();
   console.log(`[AutoSync] Scheduled quick sync every 7.5 days (${QUICK_SYNC_INTERVAL_MS / 1000 / 3600}h).`);
+
+  // Start the resource-monitor sampling scheduler.
+  scheduleResourceSampling();
+  console.log(`[ResourceMonitor] Sampling every ${RESOURCE_SAMPLE_INTERVAL_MS / 1000 / 60} min, ${RESOURCE_RETENTION_DAYS}-day retention.`);
 });

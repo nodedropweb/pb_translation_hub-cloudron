@@ -42,7 +42,8 @@ module.exports = (ctx) => {
     authenticateToken,
     isAdmin,
     isReviewerOrAdmin,
-    TRANSLATIONS_DIR
+    TRANSLATIONS_DIR,
+    logApiAccess
   } = ctx;
   const router = express.Router();
 
@@ -126,6 +127,11 @@ module.exports = (ctx) => {
   // Used by pb_localizer's ProxyManager::syncCategoryTranslations() to build
   // a local cache — avoids the drupal.org round-trip on every request.
   router.get('/categories/names', async (req, res) => {
+    const _accessStartedAt = process.hrtime.bigint();
+    const _siteUrl = req.get('X-PB-Site-Url');
+    res.on('finish', () => {
+      logApiAccess(_siteUrl, req.ip, Number(process.hrtime.bigint() - _accessStartedAt) / 1e6);
+    });
     const { langcode = 'de' } = req.query;
     const transPath = await catTransPath(TRANSLATIONS_DIR, langcode);
     if (!await fs.pathExists(transPath)) {
