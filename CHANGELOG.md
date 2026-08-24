@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.18] — 2026-08-24
+
+### Fixed
+
+- **A multi-byte character (a German „low quote“) in real data broke SQL parsing after the 0.4.16 whitelist fix.** Confirmed live: `You have an error in your SQL syntax ... near '1072642','de','Banned Words'...`. The whitelist that skips every non-`INSERT` line (0.4.16) also drops any `SET NAMES` a real dump carries — `mariadb-dump`'s output relies on the client applying those to correctly interpret its multi-byte content, the same class of dropped session state as the earlier autocommit bug, just for a statement that turned out to be necessary rather than unsafe. The import connection now explicitly requests `utf8mb4`, independent of whatever charset directives the source file itself may or may not contain.
+
 ## [0.4.17] — 2026-08-23
 
 ### Fixed

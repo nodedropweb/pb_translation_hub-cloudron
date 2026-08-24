@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.18] — 2026-08-24
+
+### Behoben
+
+- **Ein Mehrbyte-Zeichen (ein deutsches „Anführungszeichen unten“) in echten Daten legte das SQL-Parsing nach dem Whitelist-Fix aus 0.4.16 lahm.** Live bestätigt: `You have an error in your SQL syntax ... near '1072642','de','Banned Words'...`. Die Whitelist, die jede Nicht-`INSERT`-Zeile überspringt (0.4.16), entfernt auch jedes `SET NAMES`, das ein echter Dump mit sich führt — die Ausgabe von `mariadb-dump` verlässt sich darauf, dass der Client diese anwendet, um Mehrbyte-Inhalte korrekt zu interpretieren, dieselbe Art von weggeworfenem Session-State wie beim früheren Autocommit-Bug, nur diesmal für ein Statement, das sich als notwendig statt unsicher herausstellte. Die Import-Verbindung fordert jetzt explizit `utf8mb4` an, unabhängig davon, welche Zeichensatz-Direktiven die Quelldatei selbst enthält oder nicht.
+
 ## [0.4.17] — 2026-08-23
 
 ### Behoben

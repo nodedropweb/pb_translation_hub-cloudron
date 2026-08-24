@@ -737,7 +737,18 @@ async function importSqlDump(sqlGzPath) {
   const lineStream = fs.createReadStream(sqlGzPath).pipe(zlib.createGunzip());
   const rl = readline.createInterface({ input: lineStream, crlfDelay: Infinity });
 
-  const conn = await mysql.createConnection({ ...dbConfig, multipleStatements: true });
+  // charset: 'utf8mb4' — the whitelist below drops every non-INSERT line,
+  // including any `SET NAMES` a real dump file carries (mariadb-dump relies
+  // on the client applying those to correctly interpret its multi-byte
+  // output; the earlier autocommit bug was this same class of dropped
+  // session state, just for a statement that turned out to be unsafe rather
+  // than necessary). Without an explicit charset here, confirmed live: a
+  // German „low quote“ character in a translation_suggestions row produced
+  // "You have an error in your SQL syntax ... near '1072642','de','Banned
+  // Words'..." — the connection's default charset couldn't correctly
+  // interpret the multi-byte sequence, corrupting where MySQL's parser saw
+  // quotes and statement boundaries.
+  const conn = await mysql.createConnection({ ...dbConfig, multipleStatements: true, charset: 'utf8mb4' });
   let batch = [];
   let count = 0;
 
