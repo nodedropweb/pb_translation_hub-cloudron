@@ -209,6 +209,7 @@ let syncStatus = {
   shouldStop: false,
   lastFullSync: null,
   syncType: null, // 'quick' | 'full' | null
+  nextAutoSyncAt: null, // ISO timestamp — set by scheduleQuickSync() below
 };
 
 // Load last status if exists
@@ -1051,8 +1052,19 @@ async function backfillIsReviewedInFiles() {
 // so it is fast and Drupal.org-friendly.
 const QUICK_SYNC_INTERVAL_MS = 7.5 * 24 * 60 * 60 * 1000; // 7.5 days
 
+// Keeps syncStatus.nextAutoSyncAt pointing at the next scheduled tick, so the
+// dashboard can show a live "next automatic sync in X" countdown instead of
+// the background job being invisible — set once when the timer starts, then
+// refreshed on every tick (whether or not that tick actually ran a sync) so
+// it always reflects the *next* occurrence, not the one just handled.
+function refreshNextAutoSyncAt() {
+  syncStatus.nextAutoSyncAt = new Date(Date.now() + QUICK_SYNC_INTERVAL_MS).toISOString();
+}
+
 function scheduleQuickSync() {
+  refreshNextAutoSyncAt();
   setInterval(async () => {
+    refreshNextAutoSyncAt();
     if (syncStatus.active) {
       console.log('[AutoSync] Skipping scheduled quick sync — a sync is already running.');
       return;

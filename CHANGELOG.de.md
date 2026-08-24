@@ -9,6 +9,12 @@ Daten im Format `YYYY-MM-DD`.
 
 ---
 
+## [0.4.19] — 2026-08-24
+
+### Hinzugefügt
+
+- **Das Dashboard zeigt jetzt an, wann die nächste automatische Synchronisation läuft.** Der Hintergrund-Quick-Sync-Job (aus 0.4.x, läuft alle 7,5 Tage) war bisher unsichtbar — nichts auf dem Bildschirm zeigte an, dass er existiert oder wann er das nächste Mal feuert. Neben den Schnell/Sync/+Modul-Buttons erscheint jetzt eine kleine Anzeige „Nächste automatische Synchronisation in X Tagen X Std X Min", die lokal jede Minute weiterzählt. Der Server verfolgt `nextAutoSyncAt` in `syncStatus` und aktualisiert es, sobald der geplante Timer (neu) scharf geschaltet wird.
+
 ## [0.4.18] — 2026-08-24
 
 ### Behoben

@@ -9,6 +9,12 @@ Dates are in `YYYY-MM-DD` format.
 
 ---
 
+## [0.4.19] — 2026-08-24
+
+### Added
+
+- **Dashboard now shows when the next automatic sync will run.** The background quick-sync job (introduced in 0.4.x, runs every 7.5 days) was previously invisible — nothing on screen indicated it existed or when it would next fire. A small "Nächste automatische Synchronisation in X Tagen X Std X Min" indicator now appears next to the Schnell/Sync/+Modul controls, ticking down locally every minute. The server tracks `nextAutoSyncAt` on `syncStatus` and refreshes it whenever the scheduled timer (re)arms.
+
 ## [0.4.18] — 2026-08-24
 
 ### Fixed

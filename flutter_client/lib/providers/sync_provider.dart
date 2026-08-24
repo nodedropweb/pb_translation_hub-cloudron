@@ -12,6 +12,7 @@ class SyncStatus {
   final String? error;
   final String? lastFullSync;
   final String? syncType; // 'quick' | 'full' | null
+  final DateTime? nextAutoSyncAt;
 
   const SyncStatus({
     this.active = false,
@@ -22,6 +23,7 @@ class SyncStatus {
     this.error,
     this.lastFullSync,
     this.syncType,
+    this.nextAutoSyncAt,
   });
 
   factory SyncStatus.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,9 @@ class SyncStatus {
       error: json['error'] as String?,
       lastFullSync: json['lastFullSync'] as String?,
       syncType: json['syncType'] as String?,
+      nextAutoSyncAt: json['nextAutoSyncAt'] != null
+          ? DateTime.tryParse(json['nextAutoSyncAt'] as String)
+          : null,
     );
   }
 

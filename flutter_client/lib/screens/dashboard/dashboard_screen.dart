@@ -14,6 +14,7 @@ import '../../providers/language_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/sync_progress_bar.dart';
+import '../../widgets/next_sync_countdown.dart';
 import '../../widgets/search_with_autocomplete.dart';
 import '../../services/api_client.dart';
 import 'widgets/project_card.dart';
@@ -609,6 +610,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ],
             ),
           ],
+
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: NextSyncCountdown(syncStatus: syncStatus, attrs: attrs),
+          ),
 
           const SizedBox(height: 8),
 
@@ -1214,6 +1221,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
           ]),
+
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: NextSyncCountdown(syncStatus: syncStatus, attrs: attrs),
+          ),
 
           const SizedBox(height: 8),
 
