@@ -37,7 +37,7 @@ the [DNS section below](#dns) for details.
 **2. Install**
 
 ```bash
-cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 --location pb
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.21 --location pb
 ```
 
 `:latest` also works for a fresh install, but **always pin a specific version tag** (matching the
@@ -106,7 +106,7 @@ For Unsplash image search and help videos, see the full command in the
 cloudron update --app pb.drupal.de --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:<new-version>
 ```
 
-Use the **new** version's tag (e.g. `0.3.0`), not `:latest` — see the note in
+Use the **new** version's tag (e.g. `0.4.22`), not `:latest` — see the note in
 [Section 5](#5-updating-an-installed-app) below.
 
 Everything below is reference material (data import in detail, MariaDB/MySQL compatibility,
@@ -151,7 +151,7 @@ default we recommend for a production install:
 
 ```bash
 cloudron login my.<your-domain>
-cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 --location <subdomain>
+cloudron install --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.21 --location <subdomain>
 ```
 
 No build step, no Flutter SDK download on your Cloudron server — Cloudron just pulls and runs
@@ -387,7 +387,7 @@ that's already running. Always pull the target version from
 or the `version` field in `CloudronManifest.json` at the commit you're updating to.
 
 ```bash
-cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0
+cloudron update --app <subdomain> --image ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.21
 ```
 
 If you built from source instead:
@@ -454,17 +454,17 @@ trigger an update on an already-installed app, only on a fresh install).
 
 ```bash
 cd pb_translation_hub-cloudron
-# bump "version" in CloudronManifest.json, e.g. 0.1.0 → 0.2.0; add a CHANGELOG.md entry
+# bump "version" in CloudronManifest.json, e.g. 0.4.21 → 0.4.22; add a CHANGELOG.md entry
 git add -A && git commit -m "..." && git push origin master   # land the change first
 
-docker build -t ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 .
+docker build -t ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.22 .
 
 docker login ghcr.io -u <your-github-username>   # only needed once per machine
-docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0
+docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.22
 
 # Optional: also move the floating `latest` tag, purely for the convenience of a *fresh* install
 # command that doesn't need to specify a version. Never rely on this alone for updates.
-docker tag ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0 ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
+docker tag ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.22 ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 docker push ghcr.io/nodedropweb/pb_translation_hub-cloudron:latest
 ```
 
@@ -501,5 +501,5 @@ Seeding itself only runs when explicitly requested — set `SEED_ON_FIRST_BOOT=t
 permanently: it never touches an already-populated database, on any later restart or update.
 
 Once the push finishes, anyone running `cloudron update --app <subdomain> --image
-ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.2.0` (see [Section 5](#5-updating-an-installed-app))
+ghcr.io/nodedropweb/pb_translation_hub-cloudron:0.4.22` (see [Section 5](#5-updating-an-installed-app))
 picks up the new image, using the **exact version tag you just pushed** — not `:latest`.
